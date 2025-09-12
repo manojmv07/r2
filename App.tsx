@@ -105,7 +105,7 @@ const App: React.FC = () => {
         setShowQuizModal(false);
         resetChat();
     };
-
+    
     return (
         <div className="min-h-screen font-sans">
             <main className="relative z-10">

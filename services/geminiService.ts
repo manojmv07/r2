@@ -2,26 +2,27 @@
 import { GoogleGenAI, Type, Chat } from "@google/genai";
 import type { AnalysisResult, ChatMessage, Persona, SummaryLength, TechnicalDepth, QuizQuestion } from '../types';
 
-let aiInstance: GoogleGenAI | null = null;
+// Hardcoded API keys with a round-robin rotation to distribute requests.
+const API_KEYS = [
+    'AIzaSyAR2BgYjzwHRuzwmXSU_dFeekix9uhBBTA',
+    'AIzaSyAR2BgYjzwHRuzwmXSU_dFeekix9uhBBTA'
+];
+let currentKeyIndex = 0;
+
+const getNextApiKey = (): string => {
+    const key = API_KEYS[currentKeyIndex];
+    currentKeyIndex = (currentKeyIndex + 1) % API_KEYS.length;
+    return key;
+};
+
 let chatInstance: Chat | null = null;
 let chatSummary: string | null = null;
 
-// A singleton getter for the GoogleGenAI instance.
+// The getAi function will now create a new instance with the next key in rotation.
 const getAi = (): GoogleGenAI => {
-    if (aiInstance) return aiInstance;
-
-    // --- IMPORTANT ---
-    // PASTE YOUR GOOGLE GEMINI API KEY HERE
-    const apiKey = "YOUR_API_KEY_HERE";
-    // -----------------
-
-    if (!apiKey || apiKey === "YOUR_API_KEY_HERE") {
-        throw new Error("API_KEY is not set. Please replace 'YOUR_API_KEY_HERE' in services/geminiService.ts with your actual API key.");
-    }
-
+    const apiKey = getNextApiKey();
     try {
-        aiInstance = new GoogleGenAI({ apiKey });
-        return aiInstance;
+        return new GoogleGenAI({ apiKey });
     } catch (e: any) {
         console.error("Error initializing GoogleGenAI:", e.message);
         throw new Error(`Failed to initialize AI service. Is the API Key format correct?`);
@@ -106,7 +107,7 @@ const validationSchema = {
 const formatApiError = (error: any): string => {
     if (error.message) {
         if (error.message.includes('API key not valid')) {
-            return 'The provided API key is invalid. Please check the key in services/geminiService.ts.';
+            return 'The provided API key is invalid. Please check the hardcoded keys.';
         }
         if (error.message.includes('429')) {
              return 'API rate limit exceeded. Please try again in a moment.';
