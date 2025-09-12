@@ -77,6 +77,7 @@ const App: React.FC = () => {
                 setQuizQuestions(questions);
                 setShowQuizModal(true);
                 setProgress(30);
+                setIsLoading(false); // Allow the quiz modal to display
             })
             .catch(error => {
                 console.error("Failed to generate quiz:", error);
