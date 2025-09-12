@@ -3,6 +3,7 @@ import React from 'react';
 import FileUpload from './FileUpload';
 import Loader from './Loader';
 import Icon from './Icon';
+import type { HistoryItem } from '../types';
 
 interface LandingPageProps {
     onFileParsed: (text: string, images: string[], name: string) => void;
@@ -10,6 +11,8 @@ interface LandingPageProps {
     progress: number;
     updateProgress: (value: number | ((prev: number) => number)) => void;
     loadingMessage: string;
+    history: HistoryItem[];
+    onLoadFromHistory: (item: HistoryItem) => void;
 }
 
 const FeatureCard: React.FC<{ icon: 'summary' | 'lightbulb' | 'critique' | 'chat', title: string, description: string }> = ({ icon, title, description }) => (
@@ -37,7 +40,13 @@ const HowItWorksStep: React.FC<{ number: string, title: string, description: str
 );
 
 
-const LandingPage: React.FC<LandingPageProps> = ({ onFileParsed, isLoading, progress, updateProgress, loadingMessage }) => {
+const LandingPage: React.FC<LandingPageProps> = ({ onFileParsed, isLoading, progress, updateProgress, loadingMessage, history, onLoadFromHistory }) => {
+
+    const formatDate = (timestamp: number) => {
+        return new Date(timestamp).toLocaleDateString('en-US', {
+            year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+    }
 
     return (
         <div className="container mx-auto px-4 py-16 md:py-24">
@@ -58,6 +67,22 @@ const LandingPage: React.FC<LandingPageProps> = ({ onFileParsed, isLoading, prog
                 )}
             </div>
             
+            {history.length > 0 && !isLoading && (
+                 <div className="mt-24 md:mt-32 max-w-4xl mx-auto">
+                    <h2 className="text-3xl font-bold text-center mb-12 flex items-center justify-center gap-3 animate-slide-up" style={{ animationDelay: '300ms', opacity: 0, animationFillMode: 'forwards' }}>
+                        <Icon name="history" /> Recent Analyses
+                    </h2>
+                    <div className="space-y-3">
+                        {history.map(item => (
+                            <button key={item.id} onClick={() => onLoadFromHistory(item)} className="w-full text-left p-4 bg-brand-surface border border-brand-muted rounded-lg hover:border-brand-cyan transition-colors duration-200 animate-fade-in">
+                                <p className="font-semibold text-brand-text truncate">{item.title}</p>
+                                <p className="text-sm text-brand-text-muted">{item.fileName} - {formatDate(item.timestamp)}</p>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             <div className="mt-24 md:mt-32 max-w-4xl mx-auto">
                  <h2 className="text-3xl font-bold text-center mb-12 animate-slide-up" style={{ animationDelay: '300ms', opacity: 0, animationFillMode: 'forwards' }}>How It Works</h2>
                  <div className="space-y-10">

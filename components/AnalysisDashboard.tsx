@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { toast } from 'react-hot-toast';
 import { regenerateSummary } from '../services/geminiService';
 import type { AnalysisResult, VerifiablePoint } from '../types';
 import { Persona, SummaryLength, TechnicalDepth } from '../types';
@@ -7,9 +8,10 @@ import Icon from './Icon';
 import ChatInterface from './ChatInterface';
 import FigureExplainerModal from './FigureExplainerModal';
 import ExportModal from './ExportModal';
+import ConceptMap from './ConceptMap';
 
 interface AnalysisDashboardProps {
-    result: Partial<AnalysisResult>; // Now accepts partial results for progressive loading
+    result: Partial<AnalysisResult>;
     documentText: string;
     fileName: string;
     onReset: () => void;
@@ -37,7 +39,6 @@ const VerifiablePointDisplay: React.FC<{ item: VerifiablePoint }> = ({ item }) =
     </li>
 );
 
-// Skeleton loader components for a better UX during progressive loading
 const SkeletonParagraph: React.FC = () => (
     <div className="space-y-2 animate-pulse">
         <div className="h-4 bg-brand-muted rounded w-full"></div>
@@ -81,9 +82,10 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
         try {
             const newSummary = await regenerateSummary(documentText, persona, length, depth);
             setSummary(newSummary);
+            toast.success("Summary regenerated!");
         } catch (error) {
             console.error(error);
-            alert(error instanceof Error ? error.message : 'Failed to regenerate summary.');
+            toast.error(error instanceof Error ? error.message : 'Failed to regenerate summary.');
         }
         setIsRegenerating(false);
     };
@@ -125,6 +127,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
                             <TabButton active={activeTab === 'takeaways'} onClick={() => setActiveTab('takeaways')}><Icon name="takeaways" className="w-4 h-4" />Key Takeaways</TabButton>
                             <TabButton active={activeTab === 'overview'} onClick={() => setActiveTab('overview')}>Overview</TabButton>
                             <TabButton active={activeTab === 'critique'} onClick={() => setActiveTab('critique')}>Critique</TabButton>
+                            <TabButton active={activeTab === 'concept-map'} onClick={() => setActiveTab('concept-map')}><Icon name="concept-map" className="w-4 h-4" />Concept Map</TabButton>
                             <TabButton active={activeTab === 'novelty'} onClick={() => setActiveTab('novelty')}>Novelty & Future Work</TabButton>
                              {result.images && result.images.length > 0 && (
                                 <TabButton active={activeTab === 'figures'} onClick={() => setActiveTab('figures')}>Figures</TabButton>
@@ -208,6 +211,20 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
                                             </ul>
                                         ) : <SkeletonList />}
                                     </div>
+                                </div>
+                            )}
+                            {activeTab === 'concept-map' && (
+                                 <div className="animate-fade-in h-[500px]">
+                                    <h3 className="font-semibold text-brand-text mb-4">Concept Map</h3>
+                                    {result.conceptMap ? (
+                                        result.conceptMap.nodes.length > 0 ? (
+                                            <ConceptMap data={result.conceptMap} />
+                                        ) : (
+                                            <p className="text-brand-text-muted">Could not generate a concept map for this document.</p>
+                                        )
+                                    ) : (
+                                        <div className="w-full h-full bg-brand-muted rounded-lg animate-pulse"></div>
+                                    )}
                                 </div>
                             )}
                              {activeTab === 'novelty' && (

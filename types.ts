@@ -10,9 +10,14 @@ export interface QuizQuestion {
     answer: string; // The correct option text
 }
 
+export interface ConceptMapData {
+    nodes: { id: string; label: string }[];
+    links: { source: string; target: string; relationship: string }[];
+}
+
 export interface AnalysisResult {
     title?: string;
-    takeaways?: string[]; // High-level, "executive summary" points
+    takeaways?: string[];
     overallSummary?: string;
     aspects?: {
         problemStatement: string;
@@ -32,7 +37,17 @@ export interface AnalysisResult {
         title: string;
         uri: string;
     }[];
-    images: string[]; // Base64 encoded images from the doc
+    images: string[];
+    conceptMap?: ConceptMapData;
+}
+
+export interface HistoryItem {
+    id: string;
+    title: string;
+    fileName: string;
+    timestamp: number;
+    result: AnalysisResult;
+    documentText: string;
 }
 
 export interface ChatMessage {

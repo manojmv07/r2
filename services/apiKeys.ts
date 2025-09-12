@@ -1,4 +1,6 @@
 
+import { toast } from 'react-hot-toast';
+
 export const getApiKey = (): string | null => {
     try {
         return sessionStorage.getItem('gemini-api-key');
@@ -13,6 +15,6 @@ export const setApiKey = (key: string): void => {
         sessionStorage.setItem('gemini-api-key', key);
     } catch (e) {
         console.error("Could not access session storage:", e);
-        alert("Could not save API key. Your browser might be in private mode or has storage disabled.")
+        toast.error("Could not save API key. Your browser might be in private mode or has storage disabled.")
     }
 };

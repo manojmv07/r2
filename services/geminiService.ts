@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type, Chat } from "@google/genai";
-import type { AnalysisResult, ChatMessage, Persona, SummaryLength, TechnicalDepth, QuizQuestion } from '../types';
+import type { AnalysisResult, ChatMessage, Persona, SummaryLength, TechnicalDepth, QuizQuestion, ConceptMapData } from '../types';
 
 // Hardcoded API keys with a round-robin rotation to distribute requests.
 const API_KEYS = [
@@ -18,7 +18,6 @@ const getNextApiKey = (): string => {
 let chatInstance: Chat | null = null;
 let chatSummary: string | null = null;
 
-// The getAi function will now create a new instance with the next key in rotation.
 const getAi = (): GoogleGenAI => {
     const apiKey = getNextApiKey();
     try {
@@ -103,6 +102,35 @@ const validationSchema = {
     required: ['isPaper', 'reason']
 };
 
+const conceptMapSchema = {
+    type: Type.OBJECT,
+    properties: {
+        nodes: {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    id: { type: Type.STRING, description: "A unique identifier for the concept (e.g., 'neural_networks')." },
+                    label: { type: Type.STRING, description: "The name of the concept (e.g., 'Neural Networks')." },
+                },
+                required: ['id', 'label'],
+            },
+        },
+        links: {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    source: { type: Type.STRING, description: "The 'id' of the source node." },
+                    target: { type: Type.STRING, description: "The 'id' of the target node." },
+                    relationship: { type: Type.STRING, description: "A brief description of the relationship (e.g., 'is a type of', 'is used for', 'builds upon')." },
+                },
+                required: ['source', 'target', 'relationship'],
+            },
+        },
+    },
+    required: ['nodes', 'links'],
+};
 
 const formatApiError = (error: any): string => {
     if (error.message) {
@@ -199,7 +227,7 @@ export const generateInitialContent = async (
             },
         });
         const result = JSON.parse(response.text);
-        chatSummary = result.overallSummary; // Save summary for chat
+        chatSummary = result.overallSummary;
         return result;
 
     } catch (error) {
@@ -211,7 +239,7 @@ export const generateInitialContent = async (
 export const generateDetailedContent = async (
     documentText: string,
     persona: Persona
-): Promise<Omit<AnalysisResult, 'title'|'takeaways'|'overallSummary'|'images'|'relatedPapers'>> => {
+): Promise<Omit<AnalysisResult, 'title'|'takeaways'|'overallSummary'|'images'|'relatedPapers'|'conceptMap'>> => {
      try {
         const ai = getAi();
         const prompt = `You are an expert AI research assistant continuing an analysis. Based on the scientific paper below, provide a detailed breakdown for this audience: ${persona}.
@@ -246,6 +274,42 @@ export const generateDetailedContent = async (
     }
 }
 
+export const generateConceptMapData = async (documentText: string): Promise<ConceptMapData> => {
+    try {
+        const ai = getAi();
+        const prompt = `Analyze the following scientific paper and generate a concept map.
+        
+        **Instructions:**
+        1. Identify the 10-15 most important core concepts in the paper (e.g., specific algorithms, theories, datasets, problem domains).
+        2. For each concept, create a node with a unique ID and a clear label.
+        3. Identify the relationships between these concepts and create links. Describe the relationship briefly (e.g., "is a type of", "is used for", "builds upon").
+        4. Ensure the graph is connected and accurately represents the paper's structure.
+
+        **Document Text:**
+        ---
+        ${documentText.substring(0, 32000)}
+        ---
+        
+        Provide the response in the specified JSON format.`;
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: conceptMapSchema,
+            },
+        });
+        
+        return JSON.parse(response.text);
+
+    } catch (error) {
+        console.error("Error generating concept map:", error);
+        // This is non-critical, so return an empty map instead of throwing
+        return { nodes: [], links: [] };
+    }
+};
+
 export const findRelatedPapers = async (
     title: string,
     summary: string
@@ -272,7 +336,6 @@ export const findRelatedPapers = async (
 
     } catch (error) {
         console.error("Error finding related papers:", error);
-        // This is a non-critical enhancement, so we don't throw.
         return [];
     }
 };
@@ -347,7 +410,6 @@ export const explainFigure = async (documentText: string, image: string): Promis
 export const getChatStream = async (history: ChatMessage[], newMessage: string, documentText: string) => {
     const ai = getAi();
     if (!chatInstance) {
-        // One-time generation of a summary for chat context if not already done
         if (!chatSummary) {
              const summaryPrompt = `Create a concise, dense, fact-based summary of the following document. It will be used as a context for a Q&A chat, so include key terms, methodologies, and findings.
              

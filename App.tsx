@@ -1,12 +1,14 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Toaster, toast } from 'react-hot-toast';
 import LandingPage from './components/LandingPage';
 import AnalysisDashboard from './components/AnalysisDashboard';
 import Footer from './components/Footer';
 import QuizModal from './components/QuizModal';
-import { generateQuiz, validateDocument, generateInitialContent, generateDetailedContent, findRelatedPapers, resetChat } from './services/geminiService';
+import { generateQuiz, validateDocument, generateInitialContent, generateDetailedContent, findRelatedPapers, generateConceptMapData, resetChat } from './services/geminiService';
+import { getHistory, saveAnalysis } from './services/historyService';
 import { Persona } from './types';
-import type { AnalysisResult, QuizQuestion } from './types';
+import type { AnalysisResult, QuizQuestion, HistoryItem } from './types';
 
 const App: React.FC = () => {
     const [analysisResult, setAnalysisResult] = useState<Partial<AnalysisResult> | null>(null);
@@ -19,12 +21,55 @@ const App: React.FC = () => {
 
     const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
     const [showQuizModal, setShowQuizModal] = useState(false);
+    
+    const [history, setHistory] = useState<HistoryItem[]>([]);
+
+    useEffect(() => {
+        setHistory(getHistory());
+    }, []);
+    
+    // Save analysis to history whenever a complete result is generated
+    useEffect(() => {
+        if (analysisResult?.title && analysisResult?.overallSummary && analysisResult?.critique) {
+            const currentItem: HistoryItem = {
+                id: Date.now().toString(),
+                title: analysisResult.title,
+                fileName,
+                timestamp: Date.now(),
+                result: analysisResult as AnalysisResult,
+                documentText,
+            };
+            saveAnalysis(currentItem);
+            setHistory(getHistory());
+        }
+    }, [analysisResult?.critique]); // Using a late-arriving piece of data to trigger save
 
     const handleGenericError = (error: any) => {
         console.error("Operation failed:", error);
         const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
-        alert(errorMessage);
+        toast.error(errorMessage, { duration: 6000 });
         handleReset();
+    };
+
+    const proceedWithAnalysis = (text: string, images: string[], name: string) => {
+        setProgress(20);
+        setLoadingMessage('Generating comprehension quiz...');
+        setDocumentText(text);
+        setDocumentImages(images);
+        setFileName(name);
+
+        generateQuiz(text)
+            .then(questions => {
+                setQuizQuestions(questions);
+                setShowQuizModal(true);
+                setProgress(30);
+            })
+            .catch(error => {
+                console.error("Failed to generate quiz:", error);
+                toast.error(`Could not generate quiz: ${error instanceof Error ? error.message : 'Unknown error'}. Starting analysis directly.`);
+                // If quiz fails, skip to analysis
+                runAnalysis(Persona.ENGINEER);
+            });
     };
     
     const runAnalysis = async (persona: Persona) => {
@@ -34,17 +79,14 @@ const App: React.FC = () => {
         setLoadingMessage('Performing initial analysis...');
         
         try {
-            // First, get the essential content quickly.
             const initialContent = await generateInitialContent(documentText, persona);
             setProgress(75);
             setLoadingMessage('Fetching detailed analysis...');
 
-            // Set initial results to render the dashboard immediately.
             const partialResult: Partial<AnalysisResult> = { ...initialContent, images: documentImages };
             setAnalysisResult(partialResult);
-            setIsLoading(false); // Switch to dashboard view
+            setIsLoading(false);
 
-            // Concurrently fetch the rest of the data in the background.
             generateDetailedContent(documentText, persona).then(detailedContent => {
                 setAnalysisResult(prev => ({ ...prev, ...detailedContent }));
             });
@@ -54,6 +96,10 @@ const App: React.FC = () => {
                     setAnalysisResult(prev => ({ ...prev, relatedPapers }));
                 });
             }
+
+            generateConceptMapData(documentText).then(conceptMap => {
+                setAnalysisResult(prev => ({ ...prev, conceptMap }));
+            });
 
         } catch (e: any) {
             handleGenericError(e);
@@ -68,29 +114,33 @@ const App: React.FC = () => {
         try {
             const validation = await validateDocument(text);
             if (!validation.isPaper) {
-                alert(`This file does not appear to be a research paper. Reason: ${validation.reason}`);
+                toast((t) => (
+                    <div className="flex flex-col gap-3">
+                        <p><b>Warning:</b> This file may not be a research paper. ({validation.reason})</p>
+                        <div className="flex gap-2">
+                            <button onClick={() => { toast.dismiss(t.id); proceedWithAnalysis(text, images, name); }} className="w-full bg-green-500 text-white text-sm font-bold p-2 rounded-md">Proceed Anyway</button>
+                            <button onClick={() => { toast.dismiss(t.id); handleReset(); }} className="w-full bg-gray-500 text-white text-sm font-bold p-2 rounded-md">Cancel</button>
+                        </div>
+                    </div>
+                ), { duration: Infinity });
                 setIsLoading(false);
                 setProgress(0);
                 return;
             }
-            
-            setProgress(20);
-            setLoadingMessage('Generating comprehension quiz...');
-            setDocumentText(text);
-            setDocumentImages(images);
-            setFileName(name);
-
-            const questions = await generateQuiz(text);
-            setQuizQuestions(questions);
-            setShowQuizModal(true);
-            setProgress(30);
-
+            proceedWithAnalysis(text, images, name);
         } catch (error) {
              console.error("Failed to process document:", error);
-             alert(`Could not process the document: ${error instanceof Error ? error.message : 'Unknown error'}.`);
+             toast.error(`Could not process the document: ${error instanceof Error ? error.message : 'Unknown error'}.`);
              setIsLoading(false);
              setProgress(0);
         }
+    };
+
+    const handleLoadFromHistory = (item: HistoryItem) => {
+        setDocumentText(item.documentText);
+        setFileName(item.fileName);
+        setAnalysisResult(item.result);
+        setDocumentImages(item.result.images);
     };
 
     const handleReset = () => {
@@ -104,10 +154,16 @@ const App: React.FC = () => {
         setQuizQuestions([]);
         setShowQuizModal(false);
         resetChat();
+        setHistory(getHistory());
     };
     
     return (
         <div className="min-h-screen font-sans">
+            <Toaster position="top-center" toastOptions={{
+                className: 'bg-brand-muted text-brand-text border border-brand-subtle',
+                success: { iconTheme: { primary: '#00F5D4', secondary: '#0A0A0F' } },
+                error: { iconTheme: { primary: '#FF00E5', secondary: '#0A0A0F' } },
+            }} />
             <main className="relative z-10">
                 {analysisResult ? (
                     <AnalysisDashboard
@@ -123,6 +179,8 @@ const App: React.FC = () => {
                         progress={progress}
                         updateProgress={setProgress}
                         loadingMessage={loadingMessage}
+                        history={history}
+                        onLoadFromHistory={handleLoadFromHistory}
                     />
                 )}
                 {showQuizModal && !isLoading && (
