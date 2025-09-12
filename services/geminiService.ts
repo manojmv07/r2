@@ -2,6 +2,9 @@
 import { GoogleGenAI, Type, Chat } from "@google/genai";
 import type { AnalysisResult, ChatMessage, Persona, SummaryLength, TechnicalDepth, QuizQuestion } from '../types';
 
+// The user-provided API key is hardcoded here for simplicity in this school project.
+const API_KEY = "AIzaSyAR2BgYjzwHRuzwmXSU_dFeekix9uhBBTA";
+
 let aiInstance: GoogleGenAI | null = null;
 let chatInstance: Chat | null = null;
 let chatSummary: string | null = null;
@@ -10,19 +13,17 @@ let chatSummary: string | null = null;
 const getAi = (): GoogleGenAI => {
     if (aiInstance) return aiInstance;
 
-    // The API key MUST be provided via the environment variable.
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) {
-        throw new Error("The API_KEY environment variable is not set. Please configure it in your deployment environment (e.g., Vercel).");
+    if (!API_KEY) {
+        throw new Error("API_KEY is not set in geminiService.ts. Please add it.");
     }
 
     try {
-        aiInstance = new GoogleGenAI({ apiKey });
+        aiInstance = new GoogleGenAI({ apiKey: API_KEY });
         return aiInstance;
     } catch (e: any) {
         console.error("Error initializing GoogleGenAI:", e.message);
-        // This can happen if the key is structurally invalid on creation.
-        throw new Error(`Failed to initialize AI service: ${e.message}`);
+        // This can happen if the key is structurally invalid.
+        throw new Error(`Failed to initialize AI service. Is the API Key format correct?`);
     }
 };
 
@@ -88,7 +89,7 @@ const quizSchema = {
 const formatApiError = (error: any): string => {
     if (error.message) {
         if (error.message.includes('API key not valid')) {
-            return 'The provided API key is invalid. Please check the environment variable in your deployment settings.';
+            return 'The hardcoded API key is invalid. Please check the key in geminiService.ts.';
         }
         if (error.message.includes('429')) {
              return 'API rate limit exceeded. Please try again in a moment.';
