@@ -10,12 +10,13 @@ let chatSummary: string | null = null;
 const getAi = (): GoogleGenAI => {
     if (aiInstance) return aiInstance;
 
-    if (!process.env.API_KEY) {
-        throw new Error("API_KEY environment variable is not set. Please ensure it is configured.");
+    const apiKey = process.env.VITE_API_KEY;
+    if (!apiKey) {
+        throw new Error("VITE_API_KEY environment variable is not set. Please ensure it is configured in your Vercel settings.");
     }
 
     try {
-        aiInstance = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        aiInstance = new GoogleGenAI({ apiKey });
         return aiInstance;
     } catch (e: any) {
         console.error("Error initializing GoogleGenAI:", e.message);
