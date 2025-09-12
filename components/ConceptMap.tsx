@@ -129,29 +129,30 @@ const ConceptMap: React.FC<ConceptMapProps> = ({ data }) => {
     return (
         <svg ref={containerRef} width="100%" height="100%" className="bg-brand-bg rounded-md">
             <defs>
-                <marker id="arrow" viewBox="0 -5 10 10" refX="10" refY="0" markerWidth="6" markerHeight="6" orient="auto">
+                {/* FIX: Corrected SVG attribute types from string to number */}
+                <marker id="arrow" viewBox="0 -5 10 10" refX={10} refY={0} markerWidth={6} markerHeight={6} orient="auto">
                     <path d="M0,-5L10,0L0,5" fill="#505060" />
                 </marker>
             </defs>
             {links.map((link, i) => (
                 <motion.g key={`${link.source.id}-${link.target.id}`}>
+                    {/* FIX: Replaced `animate` prop with direct attributes for animation. Corrected `strokeWidth` to be a number. */}
                     <motion.line
                         x1={link.source.x} y1={link.source.y}
                         x2={link.target.x} y2={link.target.y}
                         stroke="#505060"
-                        strokeWidth="1.5"
+                        strokeWidth={1.5}
                         markerEnd="url(#arrow)"
-                        animate={{ x1: link.source.x, y1: link.source.y, x2: link.target.x, y2: link.target.y }}
                         transition={{ duration: 0.03, ease: "linear" }}
                     />
+                    {/* FIX: Replaced `animate` prop with direct attributes for animation. Corrected numeric attributes. */}
                      <motion.text
                         x={(link.source.x + link.target.x) / 2}
                         y={(link.source.y + link.target.y) / 2}
                         fill="#A0A0B0"
-                        fontSize="9"
+                        fontSize={9}
                         textAnchor="middle"
-                        dy="-4"
-                        animate={{ x: (link.source.x + link.target.x) / 2, y: (link.source.y + link.target.y) / 2 }}
+                        dy={-4}
                         transition={{ duration: 0.03, ease: "linear" }}
                     >
                         {link.relationship}
@@ -159,6 +160,7 @@ const ConceptMap: React.FC<ConceptMapProps> = ({ data }) => {
                 </motion.g>
             ))}
             {nodes.map(node => (
+                // FIX: Replaced `animate` prop with direct x/y props for positioning and animation to resolve type conflicts with `drag`.
                 <motion.g 
                     key={node.id} 
                     drag 
@@ -166,15 +168,18 @@ const ConceptMap: React.FC<ConceptMapProps> = ({ data }) => {
                     onDrag={(e,i) => handleDrag(e,i,node.id)}
                     dragMomentum={false}
                     className="cursor-grab active:cursor-grabbing"
-                    animate={{ x: node.x, y: node.y }}
+                    x={node.x}
+                    y={node.y}
                     transition={{ duration: 0.03, ease: "linear" }}
                 >
-                    <circle r="8" fill="#00F5D4" />
+                    {/* FIX: Corrected SVG attribute `r` to be a number */}
+                    <circle r={8} fill="#00F5D4" />
+                    {/* FIX: Corrected numeric SVG attributes `dy` and `fontSize` */}
                     <text
                         textAnchor="middle"
-                        dy="-12"
+                        dy={-12}
                         fill="#E0E0E0"
-                        fontSize="12"
+                        fontSize={12}
                         className="pointer-events-none select-none"
                     >
                         {node.label}

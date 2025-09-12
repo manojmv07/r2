@@ -24,15 +24,10 @@
               sans: ['Inter', 'sans-serif'],
             },
             animation: {
-              'aurora': 'aurora 60s linear infinite',
               'fade-in': 'fade-in 0.5s ease-out forwards',
               'slide-up': 'slide-up 0.5s ease-out forwards',
             },
             keyframes: {
-              'aurora': {
-                'from': { 'background-position': '0% 50%' },
-                'to': { 'background-position': '200% 50%' },
-              },
               'fade-in': {
                 '0%': { opacity: '0' },
                 '100%': { opacity: '1' },
@@ -69,9 +64,6 @@
 </script>
 </head>
 <body class="bg-brand-bg text-brand-text">
-    <div class="absolute inset-0 -z-10 h-full w-full bg-brand-bg bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-size-[14px_24px]"></div>
-    <div class="absolute -z-10 top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.3),rgba(255,255,255,0))]"></div>
-
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
 </body>
