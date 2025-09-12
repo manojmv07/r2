@@ -5,10 +5,11 @@ import LandingPage from './components/LandingPage';
 import AnalysisDashboard from './components/AnalysisDashboard';
 import Footer from './components/Footer';
 import QuizModal from './components/QuizModal';
-import { generateQuiz, validateDocument, generateInitialContent, generateDetailedContent, findRelatedPapers, generateConceptMapData, resetChat } from './services/geminiService';
+import PresentationModal from './components/PresentationModal';
+import { generateQuiz, validateDocument, generateInitialContent, generateDetailedContent, findRelatedPapers, generateConceptMapData, generatePresentation, resetChat } from './services/geminiService';
 import { getHistory, saveAnalysis } from './services/historyService';
 import { Persona } from './types';
-import type { AnalysisResult, QuizQuestion, HistoryItem } from './types';
+import type { AnalysisResult, QuizQuestion, HistoryItem, PresentationSlide } from './types';
 
 const App: React.FC = () => {
     const [analysisResult, setAnalysisResult] = useState<Partial<AnalysisResult> | null>(null);
@@ -23,6 +24,10 @@ const App: React.FC = () => {
     const [showQuizModal, setShowQuizModal] = useState(false);
     
     const [history, setHistory] = useState<HistoryItem[]>([]);
+
+    const [presentationSlides, setPresentationSlides] = useState<PresentationSlide[]>([]);
+    const [showPresentationModal, setShowPresentationModal] = useState(false);
+    const [isGeneratingPresentation, setIsGeneratingPresentation] = useState(false);
 
     useEffect(() => {
         setHistory(getHistory());
@@ -106,6 +111,27 @@ const App: React.FC = () => {
         }
     };
 
+    const handleGeneratePresentation = async () => {
+        if (!documentText) {
+            toast.error("Document content is not available to generate a presentation.");
+            return;
+        }
+        setIsGeneratingPresentation(true);
+        const generatingToast = toast.loading("Generating presentation slides...");
+        try {
+            const slides = await generatePresentation(documentText);
+            setPresentationSlides(slides);
+            setShowPresentationModal(true);
+            toast.success("Presentation generated!", { id: generatingToast });
+        } catch (error) {
+            console.error("Failed to generate presentation:", error);
+            toast.error(error instanceof Error ? error.message : "An unknown error occurred.", { id: generatingToast });
+        } finally {
+            setIsGeneratingPresentation(false);
+        }
+    };
+
+
     const handleFileParsed = async (text: string, images: string[], name: string) => {
         setIsLoading(true);
         setProgress(10);
@@ -171,6 +197,8 @@ const App: React.FC = () => {
                         documentText={documentText}
                         fileName={fileName}
                         onReset={handleReset}
+                        onGeneratePresentation={handleGeneratePresentation}
+                        isGeneratingPresentation={isGeneratingPresentation}
                     />
                 ) : (
                     <LandingPage
@@ -187,6 +215,12 @@ const App: React.FC = () => {
                     <QuizModal
                         questions={quizQuestions}
                         onComplete={runAnalysis}
+                    />
+                )}
+                {showPresentationModal && (
+                    <PresentationModal
+                        slides={presentationSlides}
+                        onClose={() => setShowPresentationModal(false)}
                     />
                 )}
             </main>

@@ -15,6 +15,11 @@ export interface ConceptMapData {
     links: { source: string; target: string; relationship: string }[];
 }
 
+export interface PresentationSlide {
+    title: string;
+    content: string[]; // Array of bullet points
+}
+
 export interface AnalysisResult {
     title?: string;
     takeaways?: string[];

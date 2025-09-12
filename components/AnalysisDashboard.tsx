@@ -15,6 +15,8 @@ interface AnalysisDashboardProps {
     documentText: string;
     fileName: string;
     onReset: () => void;
+    onGeneratePresentation: () => void;
+    isGeneratingPresentation: boolean;
 }
 
 const TabButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
@@ -59,7 +61,7 @@ const SkeletonList: React.FC<{ count?: number }> = ({ count = 3 }) => (
 );
 
 
-const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentText, fileName, onReset }) => {
+const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentText, fileName, onReset, onGeneratePresentation, isGeneratingPresentation }) => {
     const [activeTab, setActiveTab] = useState('takeaways');
     const [summary, setSummary] = useState(result.overallSummary || '');
     const [isRegenerating, setIsRegenerating] = useState(false);
@@ -103,19 +105,30 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                      <button
+                        onClick={onGeneratePresentation}
+                        disabled={isGeneratingPresentation || isExportDisabled}
+                        className="flex items-center space-x-2 bg-brand-magenta/80 hover:bg-brand-magenta text-white font-semibold py-2 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={isExportDisabled ? "Please wait for full analysis to complete" : "Generate Presentation"}
+                    >
+                        <Icon name="presentation" className={`w-5 h-5 ${isGeneratingPresentation ? 'animate-spin' : ''}`} />
+                        <span>{isGeneratingPresentation ? "Generating..." : "Presentation"}</span>
+                    </button>
+                     <button
                         onClick={() => setShowExportModal(true)}
                         disabled={isExportDisabled}
                         className="flex items-center space-x-2 bg-brand-muted hover:bg-brand-cyan hover:text-brand-bg text-white font-semibold py-2 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         title={isExportDisabled ? "Please wait for full analysis to complete" : "Export Analysis"}
                     >
-                        <span>📥 Export</span>
+                         <Icon name="export" className="w-5 h-5" />
+                        <span>Export</span>
                     </button>
                     <button
                         onClick={onReset}
                         className="flex items-center space-x-2 bg-brand-muted hover:bg-brand-cyan hover:text-brand-bg text-white font-semibold py-2 px-4 rounded-lg transition-colors"
                         title="Analyze a New Paper"
                     >
-                        <span>📄 New Paper</span>
+                         <Icon name="reset" className="w-5 h-5" />
+                        <span>New Paper</span>
                     </button>
                 </div>
             </header>

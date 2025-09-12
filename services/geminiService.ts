@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type, Chat } from "@google/genai";
-import type { AnalysisResult, ChatMessage, Persona, SummaryLength, TechnicalDepth, QuizQuestion, ConceptMapData } from '../types';
+import type { AnalysisResult, ChatMessage, Persona, SummaryLength, TechnicalDepth, QuizQuestion, ConceptMapData, PresentationSlide } from '../types';
 
 // Hardcoded API keys with a round-robin rotation to distribute requests.
 const API_KEYS = [
@@ -131,6 +131,25 @@ const conceptMapSchema = {
     },
     required: ['nodes', 'links'],
 };
+
+const presentationSchema = {
+    type: Type.OBJECT,
+    properties: {
+        slides: {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    title: { type: Type.STRING, description: "The title of the presentation slide (e.g., 'Introduction', 'Methodology')." },
+                    content: { type: Type.ARRAY, items: { type: Type.STRING }, description: "An array of 3-5 concise bullet points for the slide content." },
+                },
+                required: ['title', 'content'],
+            },
+        },
+    },
+    required: ['slides'],
+};
+
 
 const formatApiError = (error: any): string => {
     if (error.message) {
@@ -443,4 +462,39 @@ export const getChatStream = async (history: ChatMessage[], newMessage: string, 
 export const resetChat = () => {
     chatInstance = null;
     chatSummary = null;
+};
+
+export const generatePresentation = async (documentText: string): Promise<PresentationSlide[]> => {
+    try {
+        const ai = getAi();
+        const prompt = `You are an AI assistant that creates presentation drafts from scientific papers. Analyze the provided text and generate a structured, slide-by-slide presentation with a logical flow.
+        
+        **Instructions:**
+        1.  Create slides for the following sections: Title, Introduction/Problem Statement, Methodology, Key Results (1-3 slides), Critique/Limitations, and Conclusion/Future Work.
+        2.  For each slide, provide a clear title and 3-5 concise bullet points summarizing the key information.
+        3.  The content should be a synthesis of the paper's information, not direct quotes.
+        
+        **Document Text:**
+        ---
+        ${documentText.substring(0, 100000)}
+        ---
+        
+        Provide the response in the specified JSON format.`;
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: presentationSchema,
+            },
+        });
+        
+        const result = JSON.parse(response.text);
+        return result.slides;
+
+    } catch (error) {
+        console.error("Error generating presentation:", error);
+        throw new Error(`Failed to generate presentation: ${formatApiError(error)}`);
+    }
 };
