@@ -52,19 +52,28 @@ const LandingPage: React.FC<LandingPageProps> = ({ onFilesParsed, isLoading, pro
             {/* Hero Section */}
             <div className="grid lg:grid-cols-2 gap-12 items-center mb-24 md:mb-32">
                 <motion.div initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.7, delay: 0.2 }}>
-                    <h1 className="text-5xl md:text-7xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-brand-cyan to-brand-magenta leading-tight">
+                    <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-brand-cyan to-brand-magenta leading-tight">
                         Prism
                     </h1>
-                    <p className="text-lg md:text-xl text-brand-text-muted mt-4 mb-8 max-w-xl">
-                        A state-of-the-art AI research partner. Go beyond summarization to synthesize knowledge, generate ideas, and accelerate your discovery workflow.
+                    <h2 className="text-xl sm:text-2xl font-semibold text-brand-text mt-2">The All-in-One AI Platform for Scientific Research.</h2>
+                    <p className="text-md md:text-lg text-brand-text-muted mt-4 max-w-xl">
+                        Go beyond summarization. Prism is a comprehensive suite of tools designed to accelerate your entire discovery workflow—from deep analysis to brilliant presentation.
                     </p>
-                    {isLoading ? (
-                        <div className="mt-8"><Loader progress={progress} message={loadingMessage} /></div>
-                    ) : (
-                        <div className="w-full">
-                            <FileUpload onFilesParsed={onFilesParsed} updateProgress={updateProgress} />
-                        </div>
-                    )}
+                     <motion.div className="mt-6 space-y-3" variants={containerVariants} initial="hidden" animate="visible">
+                        <motion.div variants={itemVariants} className="flex items-center gap-3 text-brand-text-muted"><Icon name="check-circle" className="w-5 h-5 text-brand-cyan" /> Synthesize knowledge across multiple documents.</motion.div>
+                        <motion.div variants={itemVariants} className="flex items-center gap-3 text-brand-text-muted"><Icon name="check-circle" className="w-5 h-5 text-brand-cyan" /> Generate novel hypotheses and outline experiments.</motion.div>
+                        <motion.div variants={itemVariants} className="flex items-center gap-3 text-brand-text-muted"><Icon name="check-circle" className="w-5 h-5 text-brand-cyan" /> Chat directly with your data, figures, and tables.</motion.div>
+                    </motion.div>
+
+                    <div className="mt-10">
+                        {isLoading ? (
+                            <div className="mt-8"><Loader progress={progress} message={loadingMessage} /></div>
+                        ) : (
+                            <div className="w-full">
+                                <FileUpload onFilesParsed={onFilesParsed} updateProgress={updateProgress} />
+                            </div>
+                        )}
+                    </div>
                 </motion.div>
 
                 <motion.div 

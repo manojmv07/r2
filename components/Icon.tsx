@@ -1,7 +1,6 @@
 
 import React from 'react';
 
-// FIX: Export IconProps to be used in other components
 export interface IconProps extends React.SVGProps<SVGSVGElement> {
     name: 'upload' | 'arrow-right' | 'summary' | 'chat' | 'critique' | 'lightbulb' | 'reset' | 'send' | 'strength' | 'weakness' | 'future' | 'novelty' | 'link' | 'export' | 'regenerate' | 'takeaways' | 'concept-map' | 'history' | 'presentation' | 'copy' | 'check-circle' | 'quiz' | 'brain-circuit' | 'search' | 'synthesis' | 'flask' | 'bibliography' | 'academic-cap' | 'beaker' | 'briefcase' | 'chevron-down' | 'attach-image' | 'close';
     className?: string;

@@ -5,18 +5,19 @@ import type { AnalysisResult, ChatMessage, Persona, SummaryLength, TechnicalDept
 // Hardcoded API keys with a round-robin rotation to distribute requests.
 const API_KEYS = [
     'AIzaSyAR2BgYjzwHRuzwmXSU_dFeekix9uhBBTA',
-    'AIzaSyAR2BgYjzwHRuzwmXSU_dFeekix9uhBBTA'
+    'AIzaSyAR2BgYjzwHRuzwmXSU_dFeekix9uhBBTA',
+    'AIzaSyDsE6eI6fDUo756_ADuRAm1wkUiWSGTupI',
+    'AIzaSyDPCJ-ZQIFn88zsyDeIsR7nQGearUEY3z8',
+    'AIzaSyBY4PXJnUOSSBxB0wJIYCYDcKJ9AhQsQrU',
+    'AIzaSyDNK5X9mr8AB0wjy9D2gtvpCdQ0FUecj5Y'
 ];
 let currentKeyIndex = 0;
 
 const getNextApiKey = (): string => {
-    // FIX: The API key should be retrieved from process.env.API_KEY as per the guidelines.
-    // The hardcoded keys and rotation logic are against the guidelines.
-    if (!process.env.API_KEY) {
-        console.error("API_KEY environment variable not set!");
-        throw new Error("API key is missing. Please set the API_KEY environment variable.");
-    }
-    return process.env.API_KEY;
+    const apiKey = API_KEYS[currentKeyIndex];
+    currentKeyIndex = (currentKeyIndex + 1) % API_KEYS.length;
+    console.log(`Using API Key index: ${currentKeyIndex}`);
+    return apiKey;
 };
 
 let chatInstance: Chat | null = null;
@@ -25,7 +26,6 @@ let chatSummary: string | null = null;
 const getAi = (): GoogleGenAI => {
     const apiKey = getNextApiKey();
     try {
-        // FIX: The constructor for GoogleGenAI was called without a named parameter for apiKey.
         return new GoogleGenAI({ apiKey });
     } catch (e: any) {
         console.error("Error initializing GoogleGenAI:", e.message);
@@ -231,10 +231,10 @@ const referencesSchema = {
 const formatApiError = (error: any): string => {
     if (error.message) {
         if (error.message.includes('API key not valid')) {
-            return 'The provided API key is invalid. Please check the hardcoded keys.';
+            return 'An invalid API key was used. The system will rotate to the next key. If the error persists, please check all provided API keys.';
         }
         if (error.message.includes('429')) {
-             return 'API rate limit exceeded. Please try again in a moment.';
+             return 'API rate limit exceeded. The system will rotate to the next key. Please try again in a moment.';
         }
         return error.message;
     }
@@ -543,7 +543,6 @@ export const getChatStream = async (history: ChatMessage[], newMessage: ChatMess
         });
     }
 
-    // FIX: The `sendMessageStream` method expects the parts under the `message` property, not `parts`.
     const stream = await chatInstance.sendMessageStream({ message: messageParts });
     return stream;
 };
