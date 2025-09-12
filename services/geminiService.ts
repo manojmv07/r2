@@ -1,26 +1,13 @@
+
 import { GoogleGenAI, Type, Chat } from "@google/genai";
-import { API_KEYS } from './apiKeys';
 import type { AnalysisResult, ChatMessage, Persona, SummaryLength, TechnicalDepth, QuizQuestion } from '../types';
 
-if (!API_KEYS || API_KEYS.length === 0 || API_KEYS[0] === "YOUR_API_KEY_HERE") {
+if (!process.env.API_KEY) {
     console.error("API_KEY environment variable not set.");
     // In a real app, you might want to throw an error or handle this more gracefully
 }
 
-// --- API Key Rotation Setup ---
-const aiInstances = API_KEYS.map(apiKey => new GoogleGenAI({ apiKey }));
-let currentApiIndex = 0;
-
-const getAiInstance = () => {
-    if (aiInstances.length === 0) {
-        throw new Error("No API keys provided in apiKeys.ts");
-    }
-    const instance = aiInstances[currentApiIndex];
-    currentApiIndex = (currentApiIndex + 1) % aiInstances.length;
-    return instance;
-};
-// --- End of API Key Rotation Setup ---
-
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 let chatInstance: Chat | null = null;
 let chatSummary: string | null = null;
@@ -87,10 +74,10 @@ const quizSchema = {
 const formatApiError = (error: any): string => {
     if (error.message) {
         if (error.message.includes('API key not valid')) {
-            return 'An invalid API key was provided. Please check your keys in apiKeys.ts.';
+            return 'An invalid API key was provided. Please ensure your API_KEY is set correctly.';
         }
         if (error.message.includes('429')) {
-             return 'API rate limit exceeded, even with key rotation. Please try again in a moment or add more keys.';
+             return 'API rate limit exceeded. Please try again in a moment.';
         }
         return error.message;
     }
@@ -104,12 +91,12 @@ export const generateQuiz = async (documentText: string): Promise<QuizQuestion[]
 
         Document Text:
         ---
-        ${documentText.substring(0, 10000)}
+        ${documentText.substring(0, 32000)}
         ---
         
         Provide the quiz in the specified JSON format.`;
 
-        const response = await getAiInstance().models.generateContent({
+        const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
             config: {
@@ -125,65 +112,33 @@ export const generateQuiz = async (documentText: string): Promise<QuizQuestion[]
     }
 };
 
-const chunkText = (text: string, chunkSize = 40000, overlap = 1000) => {
-    const chunks = [];
-    let i = 0;
-    while (i < text.length) {
-        chunks.push(text.substring(i, i + chunkSize));
-        i += chunkSize - overlap;
-    }
-    return chunks;
-};
-
 export const generateInitialAnalysis = async (
     documentText: string, 
     images: string[], 
-    persona: Persona,
-    onProgress: (progress: number) => void
+    persona: Persona
 ): Promise<AnalysisResult> => {
     try {
-        // --- MAP STEP ---
-        const textChunks = chunkText(documentText);
-        const mapPrompt = `You are part of a multi-stage analysis pipeline. Analyze this chunk of a larger scientific paper. Extract and list in plain text the key claims, methodology details (including descriptions of any figures or tables mentioned), results, and potential strengths or weaknesses mentioned ONLY within this text. Be concise.
-
-        Text Chunk:
-        ---
-        `;
-        
-        const chunkPromises = textChunks.map((chunk, index) => {
-             return getAiInstance().models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: `${mapPrompt}${chunk}`,
-            }).then(response => {
-                onProgress((index + 1) / textChunks.length * 50); // Progress for map step
-                return `--- Analysis of Chunk ${index + 1} ---\n${response.text}\n\n`;
-            });
-        });
-
-        const chunkAnalyses = await Promise.all(chunkPromises);
-        onProgress(60); // Changed from 50 to 60 to show immediate progress into reduce step
-
-        // --- REDUCE STEP ---
-        const reducePrompt = `You are the final stage of an analysis pipeline. You have received preliminary analyses from different chunks of a scientific paper. Your task is to synthesize these fragmented analyses into a single, cohesive, and comprehensive report in the specified JSON format. Resolve redundancies, create a flowing narrative, and ground all claims in the provided evidence. The analysis is for a specific audience: ${persona}.
+        const prompt = `You are an expert AI research assistant. Your task is to perform a comprehensive analysis of the following scientific paper and generate a report in the specified JSON format. The analysis should be tailored for this audience: ${persona}.
 
         **Crucially, start by identifying the 3-5 most important "Key Takeaways" from the entire paper. These should be high-level, executive summary points.**
 
-        Fragmented Analyses from Chunks:
+        Based on the full text of the paper provided below, generate a complete analysis. Ground all claims in evidence from the text.
+
+        Scientific Paper Text:
         ---
-        ${chunkAnalyses.join('')}
+        ${documentText.substring(0, 500000)} 
         ---
 
-        Based *only* on the combined textual information provided above, provide the final comprehensive analysis in the specified JSON format. Your analysis should incorporate details about figures and tables as they are described in the fragmented text.`;
-        
-        const mainAnalysisResponse = await getAiInstance().models.generateContent({
+        Provide the final comprehensive analysis in the specified JSON format.`;
+
+        const mainAnalysisResponse = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
-            contents: reducePrompt, // CRITICAL FIX: Removed images from this final, heavy request to prevent timeouts.
+            contents: prompt,
             config: {
                 responseMimeType: 'application/json',
                 responseSchema: analysisSchema,
             },
         });
-        onProgress(80);
         
         const mainResult = JSON.parse(mainAnalysisResponse.text);
 
@@ -192,14 +147,13 @@ export const generateInitialAnalysis = async (
 
         // --- Google Search Step ---
         const searchPrompt = `Based on the title "${mainResult.title}" and summary "${mainResult.overallSummary}", find 5 highly relevant and recent scientific papers.`;
-        const searchResponse = await getAiInstance().models.generateContent({
+        const searchResponse = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: searchPrompt,
             config: {
                 tools: [{googleSearch: {}}],
             },
         });
-        onProgress(90);
         
         const groundingChunks = searchResponse.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
         const relatedPapers = groundingChunks
@@ -237,7 +191,7 @@ export const regenerateSummary = async (
         
         Now, provide only the regenerated summary as a single string.`;
         
-        const response = await getAiInstance().models.generateContent({
+        const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
         });
@@ -267,7 +221,7 @@ export const explainFigure = async (documentText: string, image: string): Promis
             },
         };
 
-        const response = await getAiInstance().models.generateContent({
+        const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: [ {text: prompt}, imagePart ],
         });
@@ -292,11 +246,11 @@ export const getChatStream = async (history: ChatMessage[], newMessage: string, 
              ${documentText.substring(0, 32000)}
              ---
              `;
-             const summaryResponse = await getAiInstance().models.generateContent({ model: 'gemini-2.5-flash', contents: summaryPrompt });
+             const summaryResponse = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: summaryPrompt });
              chatSummary = summaryResponse.text;
         }
 
-        chatInstance = getAiInstance().chats.create({
+        chatInstance = ai.chats.create({
             model: 'gemini-2.5-flash',
             config: {
                 systemInstruction: `You are Prism, an AI research assistant. Your task is to answer questions about a scientific paper based on the provided summary. All your answers must be grounded in the context. Be concise, accurate, and helpful. Do not mention that you are an AI.

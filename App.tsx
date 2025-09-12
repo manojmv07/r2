@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import LandingPage from './components/LandingPage';
 import AnalysisDashboard from './components/AnalysisDashboard';
@@ -42,11 +43,10 @@ const App: React.FC = () => {
 
     const runAnalysis = async (persona: Persona) => {
         setShowQuizModal(false);
+        setIsLoading(true);
+        setProgress(50); // Set to intermediate state for single analysis call
         try {
-            const result = await generateInitialAnalysis(documentText, documentImages, persona, (p) => {
-                // The analysis service will report progress from 30 to 90
-                setProgress(30 + p * 0.6); 
-            });
+            const result = await generateInitialAnalysis(documentText, documentImages, persona);
             
             setProgress(100);
             setAnalysisResult({ ...result, images: documentImages });
@@ -55,6 +55,7 @@ const App: React.FC = () => {
             // Handle analysis error, maybe show a toast
             console.error("Analysis failed:", e);
             alert(`${e.message || 'An unknown error occurred during analysis.'}`);
+            setProgress(0); // Reset on error
         } finally {
             setIsLoading(false);
         }
