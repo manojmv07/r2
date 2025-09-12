@@ -1,0 +1,5 @@
+{
+  "name": "Prism: AI Scientific literature Analysis",
+  "description": "An interactive, multimodal AI framework for the summarization, explanation, and critique of scientific literature. Upload a research paper (PDF, DOCX, TXT) to get AI-powered insights, including multi-aspect summaries, audience-adaptive explanations, and a simulated peer review.",
+  "requestFramePermissions": []
+}
