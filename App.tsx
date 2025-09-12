@@ -279,6 +279,8 @@ const App: React.FC = () => {
                 {showPresentationModal && (
                     <PresentationModal
                         slides={presentationSlides}
+                        paperTitle={analysisResult?.title || 'Untitled Presentation'}
+                        fileName={fileName}
                         onClose={() => setShowPresentationModal(false)}
                     />
                 )}
