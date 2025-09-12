@@ -10,9 +10,13 @@ let chatSummary: string | null = null;
 const getAi = (): GoogleGenAI => {
     if (aiInstance) return aiInstance;
 
-    const apiKey = process.env.VITE_API_KEY;
-    if (!apiKey) {
-        throw new Error("VITE_API_KEY environment variable is not set. Please ensure it is configured in your Vercel settings.");
+    // --- IMPORTANT ---
+    // PASTE YOUR GOOGLE GEMINI API KEY HERE
+    const apiKey = "YOUR_API_KEY_HERE";
+    // -----------------
+
+    if (!apiKey || apiKey === "YOUR_API_KEY_HERE") {
+        throw new Error("API_KEY is not set. Please replace 'YOUR_API_KEY_HERE' in services/geminiService.ts with your actual API key.");
     }
 
     try {
@@ -102,7 +106,7 @@ const validationSchema = {
 const formatApiError = (error: any): string => {
     if (error.message) {
         if (error.message.includes('API key not valid')) {
-            return 'The provided API key is invalid. Please check your environment configuration.';
+            return 'The provided API key is invalid. Please check the key in services/geminiService.ts.';
         }
         if (error.message.includes('429')) {
              return 'API rate limit exceeded. Please try again in a moment.';
