@@ -3,7 +3,7 @@ import React from 'react';
 
 // FIX: Export IconProps to be used in other components
 export interface IconProps extends React.SVGProps<SVGSVGElement> {
-    name: 'upload' | 'arrow-right' | 'summary' | 'chat' | 'critique' | 'lightbulb' | 'reset' | 'send' | 'strength' | 'weakness' | 'future' | 'novelty' | 'link' | 'export' | 'regenerate' | 'takeaways' | 'concept-map' | 'history' | 'presentation' | 'copy' | 'check-circle' | 'quiz' | 'brain-circuit' | 'search';
+    name: 'upload' | 'arrow-right' | 'summary' | 'chat' | 'critique' | 'lightbulb' | 'reset' | 'send' | 'strength' | 'weakness' | 'future' | 'novelty' | 'link' | 'export' | 'regenerate' | 'takeaways' | 'concept-map' | 'history' | 'presentation' | 'copy' | 'check-circle' | 'quiz' | 'brain-circuit' | 'search' | 'synthesis' | 'flask' | 'bibliography' | 'academic-cap' | 'beaker' | 'briefcase' | 'chevron-down' | 'attach-image' | 'close';
     className?: string;
 }
 
@@ -32,6 +32,15 @@ const ICONS: Record<IconProps['name'], JSX.Element> = {
     quiz: <path strokeLinecap="round" strokeLinejoin="round" d="M10.125 2.25h-4.5c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125v-9M10.125 2.25h.375a9 9 0 019 9v.375M10.125 2.25c-.621 0-1.125.504-1.125 1.125v3.375c0 .621.504 1.125 1.125 1.125h1.5c.621 0 1.125-.504 1.125-1.125v-3.375c0-.621-.504-1.125-1.125-1.125h-1.5z" />,
     'brain-circuit': <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3.75h-.375a3.375 3.375 0 00-3.375 3.375v.375m3.75 0V6.75m3.75 0v-1.875a3.375 3.375 0 00-3.375-3.375h-.375m-1.5 3.75h.375a3.375 3.375 0 013.375 3.375v.375m0 0V12m0 6v-1.875a3.375 3.375 0 00-3.375-3.375h-.375m-1.5 3.75h.375a3.375 3.375 0 013.375 3.375v.375m-3.75 0V18m-3.75 0v1.875a3.375 3.375 0 003.375 3.375h.375m1.5-3.75h-.375a3.375 3.375 0 01-3.375-3.375v-.375m0 0V12m0-6v1.875a3.375 3.375 0 003.375 3.375h.375m1.5-3.75h-.375a3.375 3.375 0 01-3.375-3.375v-.375m3.75 0V6" />,
     search: <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />,
+    synthesis: <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 1.5L1.5 3.75m0 0L3.75 6m-2.25-2.25h15m5.25 16.5l2.25-2.25m0 0L20.25 18m2.25 2.25h-15M3.75 10.5l1.5 1.5 1.5-1.5m-3 0h3.75m10.5 0l-1.5 1.5-1.5-1.5m3 0h-3.75" />,
+    flask: <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.852l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />,
+    bibliography: <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />,
+    'academic-cap': <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0l-3.232-1.78a59.902 59.902 0 011.723-3.234l3.232 1.78A50.57 50.57 0 0012 5.253a50.57 50.57 0 00-6.268-1.135z" />,
+    beaker: <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 6.087c0-.597.484-1.087 1.088-1.087h.003a1.087 1.087 0 011.087 1.087v2.025M16.5 6.087c0-.597.484-1.087 1.088-1.087h.003a1.087 1.087 0 011.087 1.087v2.025M5.625 9.375v3.75c0 .597.484 1.088 1.088 1.088h8.574c.604 0 1.088-.49 1.088-1.088v-3.75M3.375 9.375h17.25M3.375 9.375c0-1.036.84-1.875 1.875-1.875h13.5c1.036 0 1.875.84 1.875 1.875v9.75c0 1.036-.84 1.875-1.875 1.875h-13.5c-1.036 0-1.875-.84-1.875-1.875v-9.75z" />,
+    briefcase: <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 14.25L12 18.75 3.75 14.25A3 3 0 012.25 12v-7.5A3 3 0 015.25 2.25h13.5A3 3 0 0121.75 4.5v7.5a3 3 0 01-1.5 2.625zM12 18.75V21.75M8.25 15L12 16.5l3.75-1.5M12 12v3.75" />,
+    'chevron-down': <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />,
+    'attach-image': <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />,
+    close: <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />,
 };
 
 const Icon: React.FC<IconProps> = ({ name, className = 'w-6 h-6', ...props }) => {

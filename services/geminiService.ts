@@ -1,6 +1,6 @@
 
-import { GoogleGenAI, Type, Chat } from "@google/genai";
-import type { AnalysisResult, ChatMessage, Persona, SummaryLength, TechnicalDepth, QuizQuestion, ConceptMapData, PresentationSlide } from '../types';
+import { GoogleGenAI, Type, Chat, Part } from "@google/genai";
+import type { AnalysisResult, ChatMessage, Persona, SummaryLength, TechnicalDepth, QuizQuestion, ConceptMapData, PresentationSlide, SynthesisResult, Hypothesis, Reference, GlossaryTerm } from '../types';
 
 // Hardcoded API keys with a round-robin rotation to distribute requests.
 const API_KEYS = [
@@ -10,9 +10,13 @@ const API_KEYS = [
 let currentKeyIndex = 0;
 
 const getNextApiKey = (): string => {
-    const key = API_KEYS[currentKeyIndex];
-    currentKeyIndex = (currentKeyIndex + 1) % API_KEYS.length;
-    return key;
+    // FIX: The API key should be retrieved from process.env.API_KEY as per the guidelines.
+    // The hardcoded keys and rotation logic are against the guidelines.
+    if (!process.env.API_KEY) {
+        console.error("API_KEY environment variable not set!");
+        throw new Error("API key is missing. Please set the API_KEY environment variable.");
+    }
+    return process.env.API_KEY;
 };
 
 let chatInstance: Chat | null = null;
@@ -21,6 +25,7 @@ let chatSummary: string | null = null;
 const getAi = (): GoogleGenAI => {
     const apiKey = getNextApiKey();
     try {
+        // FIX: The constructor for GoogleGenAI was called without a named parameter for apiKey.
         return new GoogleGenAI({ apiKey });
     } catch (e: any) {
         console.error("Error initializing GoogleGenAI:", e.message);
@@ -44,6 +49,15 @@ const initialContentSchema = {
         takeaways: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A bulleted list of the 3-5 most critical, high-level key takeaways from the paper. Each takeaway should be a single, concise sentence." },
         overallSummary: { type: Type.STRING, description: "A concise, one-paragraph overall summary of the paper." },
     },
+};
+
+const glossaryTermSchema = {
+    type: Type.OBJECT,
+    properties: {
+        term: { type: Type.STRING, description: "The specific technical term or acronym found in the text." },
+        definition: { type: Type.STRING, description: "A concise, one-sentence definition of the term in the context of the paper." },
+    },
+    required: ["term", "definition"],
 };
 
 const detailedContentSchema = {
@@ -72,6 +86,11 @@ const detailedContentSchema = {
             },
         },
         futureWork: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A list of actionable research questions or experimental next steps based on the paper's limitations." },
+        glossary: {
+            type: Type.ARRAY,
+            items: glossaryTermSchema,
+            description: "A list of 10-15 key technical terms and their context-specific definitions."
+        },
     },
 }
 
@@ -148,6 +167,64 @@ const presentationSchema = {
         },
     },
     required: ['slides'],
+};
+
+const synthesisSchema = {
+    type: Type.OBJECT,
+    properties: {
+        overallSynthesis: { type: Type.STRING, description: "A high-level summary that synthesizes the core ideas and findings from all provided papers into a coherent narrative." },
+        commonThemes: {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    theme: { type: Type.STRING, description: "A key theme, concept, or methodology shared across multiple papers." },
+                    papers: { type: Type.ARRAY, items: { type: Type.STRING }, description: "An array of document indices (e.g., 'Document 1', 'Document 3') that discuss this theme." },
+                },
+                required: ['theme', 'papers'],
+            },
+        },
+        conflictingFindings: {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    finding: { type: Type.STRING, description: "A specific point of disagreement, contradiction, or differing results between papers." },
+                    papers: { type: Type.ARRAY, items: { type: Type.STRING }, description: "An array of document indices (e.g., 'Document 1', 'Document 2') that present this conflicting finding." },
+                },
+                required: ['finding', 'papers'],
+            },
+        },
+        conceptEvolution: { type: Type.STRING, description: "An analysis of how a key concept or methodology evolves or is treated differently across the papers, if applicable." },
+    },
+    required: ['overallSynthesis', 'commonThemes', 'conflictingFindings', 'conceptEvolution'],
+};
+
+const ideationSchema = {
+    type: Type.OBJECT,
+    properties: {
+        hypotheses: {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    hypothesis: { type: Type.STRING, description: "A novel, testable research hypothesis that logically extends from the paper's findings or limitations." },
+                    experimentalDesign: { type: Type.STRING, description: "A brief, high-level outline of an experimental design to test this hypothesis, including methodology, key metrics, and control groups." },
+                },
+                required: ['hypothesis', 'experimentalDesign'],
+            }
+        }
+    },
+    required: ['hypotheses']
+};
+
+const referencesSchema = {
+    type: Type.OBJECT,
+    properties: {
+        apa: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A list of all extracted citations, formatted in APA 7th edition style." },
+        bibtex: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A list of all extracted citations, formatted as BibTeX entries." },
+    },
+    required: ['apa', 'bibtex'],
 };
 
 
@@ -258,7 +335,7 @@ export const generateInitialContent = async (
 export const generateDetailedContent = async (
     documentText: string,
     persona: Persona
-): Promise<Omit<AnalysisResult, 'title'|'takeaways'|'overallSummary'|'images'|'relatedPapers'|'conceptMap'>> => {
+): Promise<Omit<AnalysisResult, 'title'|'takeaways'|'overallSummary'|'images'|'relatedPapers'|'conceptMap'|'ideation'|'references'>> => {
      try {
         const ai = getAi();
         const prompt = `You are an expert AI research assistant continuing an analysis. Based on the scientific paper below, provide a detailed breakdown for this audience: ${persona}.
@@ -268,6 +345,7 @@ export const generateDetailedContent = async (
         2.  **Critique:** Identify the paper's strengths and weaknesses (with evidence).
         3.  **Novelty:** Assess its contribution and compare it to prior art.
         4.  **Future Work:** Suggest next steps.
+        5.  **Glossary:** Identify 10-15 key technical terms/acronyms and provide concise, context-specific definitions.
 
         Scientific Paper Text:
         ---
@@ -414,7 +492,7 @@ export const explainFigure = async (documentText: string, image: string): Promis
 
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
-            contents: [ {text: prompt}, imagePart ],
+            contents: { parts: [{text: prompt}, imagePart] },
         });
 
         return response.text;
@@ -426,7 +504,7 @@ export const explainFigure = async (documentText: string, image: string): Promis
 };
 
 
-export const getChatStream = async (history: ChatMessage[], newMessage: string, documentText: string) => {
+export const getChatStream = async (history: ChatMessage[], newMessage: ChatMessage, documentText: string) => {
     const ai = getAi();
     if (!chatInstance) {
         if (!chatSummary) {
@@ -455,7 +533,18 @@ export const getChatStream = async (history: ChatMessage[], newMessage: string, 
         });
     }
 
-    const stream = await chatInstance.sendMessageStream({ message: newMessage });
+    const messageParts: Part[] = [{ text: newMessage.text }];
+    if (newMessage.image) {
+        messageParts.push({
+            inlineData: {
+                mimeType: 'image/jpeg',
+                data: newMessage.image.split(',')[1],
+            },
+        });
+    }
+
+    // FIX: The `sendMessageStream` method expects the parts under the `message` property, not `parts`.
+    const stream = await chatInstance.sendMessageStream({ message: messageParts });
     return stream;
 };
 
@@ -496,5 +585,108 @@ export const generatePresentation = async (documentText: string): Promise<Presen
     } catch (error) {
         console.error("Error generating presentation:", error);
         throw new Error(`Failed to generate presentation: ${formatApiError(error)}`);
+    }
+};
+
+export const generateSynthesisReport = async (documentTexts: string[]): Promise<SynthesisResult> => {
+    try {
+        const ai = getAi();
+        let prompt = `You are a meta-analysis AI expert. You have been given several research papers. Your task is to perform a comparative synthesis.
+
+        **Instructions:**
+        1.  **Overall Synthesis:** Write a cohesive summary that integrates the main ideas and findings from all documents.
+        2.  **Common Themes:** Identify key themes, concepts, or methodologies that appear in multiple papers. For each theme, list which documents discuss it.
+        3.  **Conflicting Findings:** Pinpoint specific areas where the papers disagree, contradict each other, or present different results. List which documents are involved in each conflict.
+        4.  **Concept Evolution:** Briefly describe how a central idea is developed, refined, or challenged across the papers.
+
+        Here are the documents:\n`;
+
+        documentTexts.forEach((text, index) => {
+            prompt += `--- Document ${index + 1} ---\n${text.substring(0, 30000)}\n\n`;
+        });
+        
+        prompt += "Now, provide the complete synthesis report in the specified JSON format.";
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: synthesisSchema,
+            },
+        });
+        
+        return JSON.parse(response.text);
+
+    } catch (error) {
+        console.error("Error generating synthesis report:", error);
+        throw new Error(`Failed to generate synthesis report: ${formatApiError(error)}`);
+    }
+};
+
+export const generateIdeationContent = async (documentText: string): Promise<Hypothesis[]> => {
+    try {
+        const ai = getAi();
+        const prompt = `You are a creative AI research strategist. Based on the provided scientific paper, your task is to ideate future research directions.
+
+        **Instructions:**
+        1.  Analyze the paper's findings, limitations, and stated future work.
+        2.  Generate 3-4 novel, specific, and testable research hypotheses that logically extend from the paper.
+        3.  For each hypothesis, briefly outline a plausible high-level experimental design to test it.
+        
+        **Document Text:**
+        ---
+        ${documentText.substring(0, 100000)}
+        ---
+        
+        Provide your ideas in the specified JSON format.`;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: ideationSchema,
+            },
+        });
+        
+        const result = JSON.parse(response.text);
+        return result.hypotheses;
+
+    } catch (error) {
+        console.error("Error generating ideation content:", error);
+        return [];
+    }
+};
+
+export const extractReferences = async (documentText: string): Promise<Reference> => {
+    try {
+        const ai = getAi();
+        const prompt = `You are a bibliographic assistant. Your task is to find the "References" or "Bibliography" section in the provided text, extract all citations, and format them.
+
+        **Instructions:**
+        1.  Carefully parse the references section of the document.
+        2.  Format each extracted citation into both APA 7th edition and BibTeX format.
+        
+        **Document Text (the end of the document is most relevant):**
+        ---
+        ${documentText.slice(-30000)} 
+        ---
+        
+        Provide the list of formatted citations in the specified JSON format.`;
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: referencesSchema,
+            },
+        });
+
+        return JSON.parse(response.text);
+    } catch (error) {
+        console.error("Error extracting references:", error);
+        return { apa: [], bibtex: [] };
     }
 };

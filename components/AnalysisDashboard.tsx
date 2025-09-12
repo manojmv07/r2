@@ -2,13 +2,15 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import { regenerateSummary } from '../services/geminiService';
-import type { AnalysisResult, VerifiablePoint } from '../types';
+import type { AnalysisResult, VerifiablePoint, Reference } from '../types';
 import { Persona, SummaryLength, TechnicalDepth } from '../types';
 import Icon from './Icon';
 import ChatInterface from './ChatInterface';
 import FigureExplainerModal from './FigureExplainerModal';
 import ExportModal from './ExportModal';
 import ConceptMap from './ConceptMap';
+import HighlightableText from './HighlightableText';
+import useCopyToClipboard from '../hooks/useCopyToClipboard';
 
 interface AnalysisDashboardProps {
     result: Partial<AnalysisResult>;
@@ -32,20 +34,20 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
     </button>
 );
 
-const VerifiablePointDisplay: React.FC<{ item: VerifiablePoint }> = ({ item }) => (
+const VerifiablePointDisplay: React.FC<{ item: VerifiablePoint, glossary: AnalysisResult['glossary'] }> = ({ item, glossary }) => (
     <li>
-        <p>{item.point}</p>
+        <HighlightableText text={item.point} glossary={glossary} />
         <blockquote className="mt-1 pl-3 border-l-2 border-brand-subtle text-xs text-brand-text-muted/80 italic">
-            "{item.evidence}"
+            <HighlightableText text={`"${item.evidence}"`} glossary={glossary} />
         </blockquote>
     </li>
 );
 
-const SkeletonParagraph: React.FC = () => (
+const SkeletonParagraph: React.FC<{ lines?: number }> = ({ lines = 3 }) => (
     <div className="space-y-2 animate-pulse">
-        <div className="h-4 bg-brand-muted rounded w-full"></div>
-        <div className="h-4 bg-brand-muted rounded w-5/6"></div>
-        <div className="h-4 bg-brand-muted rounded w-3/4"></div>
+        {Array.from({ length: lines }).map((_, i) => (
+             <div key={i} className="h-4 bg-brand-muted rounded" style={{ width: `${100 - i*10}%`}}></div>
+        ))}
     </div>
 );
 
@@ -59,6 +61,28 @@ const SkeletonList: React.FC<{ count?: number }> = ({ count = 3 }) => (
         ))}
     </ul>
 );
+
+const ReferencesDisplay: React.FC<{ references: Reference }> = ({ references }) => {
+    const [format, setFormat] = useState<'apa' | 'bibtex'>('apa');
+    const [isCopied, copy] = useCopyToClipboard();
+    const content = format === 'apa' ? references.apa.join('\n\n') : references.bibtex.join('\n\n');
+
+    return (
+        <div>
+            <div className="flex justify-between items-center mb-4">
+                <div className="flex gap-1 p-1 bg-brand-bg rounded-lg border border-brand-muted">
+                    <button onClick={() => setFormat('apa')} className={`px-3 py-1 text-sm rounded-md ${format === 'apa' ? 'bg-brand-muted text-brand-text' : 'text-brand-text-muted'}`}>APA</button>
+                    <button onClick={() => setFormat('bibtex')} className={`px-3 py-1 text-sm rounded-md ${format === 'bibtex' ? 'bg-brand-muted text-brand-text' : 'text-brand-text-muted'}`}>BibTeX</button>
+                </div>
+                <button onClick={() => copy(content)} className="flex items-center gap-2 text-sm bg-brand-muted hover:bg-brand-subtle px-3 py-2 rounded-lg transition-colors">
+                    {isCopied ? <Icon name="check-circle" className="w-4 h-4 text-green-400" /> : <Icon name="copy" className="w-4 h-4" />}
+                    {isCopied ? 'Copied!' : 'Copy All'}
+                </button>
+            </div>
+            <pre className="text-xs bg-brand-bg p-4 rounded-lg whitespace-pre-wrap max-h-[400px] overflow-y-auto font-mono">{content}</pre>
+        </div>
+    );
+};
 
 
 const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentText, fileName, onReset, onGeneratePresentation, isGeneratingPresentation }) => {
@@ -140,12 +164,13 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
                             <TabButton active={activeTab === 'takeaways'} onClick={() => setActiveTab('takeaways')}><Icon name="takeaways" className="w-4 h-4" />Key Takeaways</TabButton>
                             <TabButton active={activeTab === 'overview'} onClick={() => setActiveTab('overview')}>Overview</TabButton>
                             <TabButton active={activeTab === 'critique'} onClick={() => setActiveTab('critique')}>Critique</TabButton>
+                            <TabButton active={activeTab === 'ideation'} onClick={() => setActiveTab('ideation')}><Icon name="flask" className="w-4 h-4" />Ideation Lab</TabButton>
                             <TabButton active={activeTab === 'concept-map'} onClick={() => setActiveTab('concept-map')}><Icon name="concept-map" className="w-4 h-4" />Concept Map</TabButton>
-                            <TabButton active={activeTab === 'novelty'} onClick={() => setActiveTab('novelty')}>Novelty & Future Work</TabButton>
                              {result.images && result.images.length > 0 && (
                                 <TabButton active={activeTab === 'figures'} onClick={() => setActiveTab('figures')}>Figures</TabButton>
                             )}
-                            <TabButton active={activeTab === 'related'} onClick={() => setActiveTab('related')}>Related Papers</TabButton>
+                            <TabButton active={activeTab === 'references'} onClick={() => setActiveTab('references')}><Icon name="bibliography" className="w-4 h-4" />References</TabButton>
+                            <TabButton active={activeTab === 'related'} onClick={() => setActiveTab('related')}>Related</TabButton>
                         </div>
                         <div className="p-6 min-h-[400px]">
                              {activeTab === 'takeaways' && (
@@ -156,7 +181,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
                                             {result.takeaways.map((takeaway, i) => (
                                                 <li key={i} className="flex items-start gap-3">
                                                     <Icon name="takeaways" className="w-5 h-5 text-brand-cyan flex-shrink-0 mt-1" />
-                                                    <p className="text-brand-text-muted">{takeaway}</p>
+                                                    <p className="text-brand-text-muted"><HighlightableText text={takeaway} glossary={result.glossary} /></p>
                                                 </li>
                                             ))}
                                         </ul>
@@ -186,21 +211,21 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
 
                                     <div>
                                         <h3 className="font-semibold text-brand-text mb-2">Overall Summary:</h3>
-                                        {summary ? <p>{summary}</p> : <SkeletonParagraph />}
+                                        {summary ? <p><HighlightableText text={summary} glossary={result.glossary} /></p> : <SkeletonParagraph />}
                                     </div>
                                     <div className="pt-4 border-t border-brand-muted/50">
                                         <h4 className="font-semibold text-brand-cyan mb-2">Problem Statement</h4>
-                                        {result.aspects ? <p className="text-sm">{result.aspects.problemStatement}</p> : <SkeletonParagraph />}
+                                        {result.aspects ? <p className="text-sm"><HighlightableText text={result.aspects.problemStatement} glossary={result.glossary} /></p> : <SkeletonParagraph />}
                                     </div>
                                     <div className="pt-4 border-t border-brand-muted/50">
                                         <h4 className="font-semibold text-brand-cyan mb-2">Methodology</h4>
-                                        {result.aspects ? <p className="text-sm">{result.aspects.methodology}</p> : <SkeletonParagraph />}
+                                        {result.aspects ? <p className="text-sm"><HighlightableText text={result.aspects.methodology} glossary={result.glossary} /></p> : <SkeletonParagraph />}
                                     </div>
                                     <div className="pt-4 border-t border-brand-muted/50">
                                         <h4 className="font-semibold text-brand-cyan mb-2">Key Findings</h4>
                                         {result.aspects ? (
                                             <ul className="list-none space-y-3 text-sm">
-                                                {result.aspects.keyFindings.map((kf, i) => <VerifiablePointDisplay key={i} item={kf} />)}
+                                                {result.aspects.keyFindings.map((kf, i) => <VerifiablePointDisplay key={i} item={kf} glossary={result.glossary}/>)}
                                             </ul>
                                         ) : <SkeletonList />}
                                     </div>
@@ -212,7 +237,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
                                         <h4 className="font-semibold text-green-400 mb-2 flex items-center gap-2"><Icon name="strength" />Strengths</h4>
                                         {result.critique ? (
                                             <ul className="list-none space-y-3 text-sm">
-                                                {result.critique.strengths.map((s, i) => <VerifiablePointDisplay key={i} item={s} />)}
+                                                {result.critique.strengths.map((s, i) => <VerifiablePointDisplay key={i} item={s} glossary={result.glossary}/>)}
                                             </ul>
                                         ) : <SkeletonList />}
                                     </div>
@@ -220,10 +245,29 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
                                         <h4 className="font-semibold text-red-400 mb-2 flex items-center gap-2"><Icon name="weakness" />Weaknesses</h4>
                                         {result.critique ? (
                                             <ul className="list-none space-y-3 text-sm">
-                                                {result.critique.weaknesses.map((w, i) => <VerifiablePointDisplay key={i} item={w} />)}
+                                                {result.critique.weaknesses.map((w, i) => <VerifiablePointDisplay key={i} item={w} glossary={result.glossary} />)}
                                             </ul>
                                         ) : <SkeletonList />}
                                     </div>
+                                </div>
+                            )}
+                            {activeTab === 'ideation' && (
+                                <div className="animate-fade-in space-y-6">
+                                    <h3 className="font-semibold text-brand-text mb-4">AI Ideation Lab</h3>
+                                    {result.ideation ? (
+                                        result.ideation.length > 0 ? (
+                                             <div className="space-y-4">
+                                                {result.ideation.map((idea, i) => (
+                                                    <div key={i} className="p-4 bg-brand-bg rounded-lg border border-brand-muted/50">
+                                                        <h4 className="font-semibold text-brand-cyan mb-2">Hypothesis {i+1}</h4>
+                                                        <p className="text-sm mb-3"><HighlightableText text={idea.hypothesis} glossary={result.glossary} /></p>
+                                                        <h5 className="font-semibold text-brand-text-muted text-xs mb-1">Proposed Experiment</h5>
+                                                        <p className="text-xs text-brand-text-muted/80"><HighlightableText text={idea.experimentalDesign} glossary={result.glossary} /></p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : <p className="text-brand-text-muted text-sm">No new research hypotheses were generated.</p>
+                                    ) : <SkeletonList count={2} />}
                                 </div>
                             )}
                             {activeTab === 'concept-map' && (
@@ -240,27 +284,6 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
                                     )}
                                 </div>
                             )}
-                             {activeTab === 'novelty' && (
-                                 <div className="space-y-6 animate-fade-in">
-                                     <div>
-                                        <h4 className="font-semibold text-brand-cyan mb-2 flex items-center gap-2"><Icon name="novelty" />Novelty Assessment</h4>
-                                        {result.novelty ? (
-                                            <>
-                                                <p className="text-sm">{result.novelty.assessment}</p>
-                                                <p className="text-xs text-brand-text-muted/70 mt-2">{result.novelty.comparison}</p>
-                                            </>
-                                        ) : <SkeletonParagraph />}
-                                    </div>
-                                    <div className="pt-4 border-t border-brand-muted/50">
-                                        <h4 className="font-semibold text-brand-cyan mb-2 flex items-center gap-2"><Icon name="future" />Future Work</h4>
-                                        {result.futureWork ? (
-                                            <ul className="list-disc list-inside space-y-1 text-sm">
-                                                {result.futureWork.map((fw, i) => <li key={i}>{fw}</li>)}
-                                            </ul>
-                                        ) : <SkeletonList />}
-                                    </div>
-                                </div>
-                            )}
                             {activeTab === 'figures' && (
                                 <div className="animate-fade-in">
                                     <h3 className="font-semibold text-brand-text mb-4">Extracted Figures</h3>
@@ -274,6 +297,14 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
                                             </div>
                                         ))}
                                     </div>
+                                </div>
+                            )}
+                             {activeTab === 'references' && (
+                                <div className="animate-fade-in">
+                                    <h3 className="font-semibold text-brand-text mb-4">Extracted References</h3>
+                                    {result.references ? (
+                                        <ReferencesDisplay references={result.references} />
+                                    ) : <SkeletonParagraph lines={5} />}
                                 </div>
                             )}
                              {activeTab === 'related' && (
@@ -299,7 +330,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
                 </div>
 
                 <div className="lg:col-span-1">
-                    <ChatInterface documentText={documentText} />
+                    <ChatInterface documentText={documentText} figures={result.images || []} />
                 </div>
             </main>
             {showFigureModal && (

@@ -20,6 +20,21 @@ export interface PresentationSlide {
     content: string[]; // Array of bullet points
 }
 
+export interface GlossaryTerm {
+    term: string;
+    definition: string;
+}
+
+export interface Hypothesis {
+    hypothesis: string;
+    experimentalDesign: string;
+}
+
+export interface Reference {
+    apa: string[];
+    bibtex: string[];
+}
+
 export interface AnalysisResult {
     title?: string;
     takeaways?: string[];
@@ -44,6 +59,22 @@ export interface AnalysisResult {
     }[];
     images: string[];
     conceptMap?: ConceptMapData;
+    glossary?: GlossaryTerm[];
+    ideation?: Hypothesis[];
+    references?: Reference;
+}
+
+export interface SynthesisResult {
+    overallSynthesis: string;
+    commonThemes: {
+        theme: string;
+        papers: string[]; // list of file names or indices
+    }[];
+    conflictingFindings: {
+        finding: string;
+        papers: string[];
+    }[];
+    conceptEvolution: string;
 }
 
 export interface HistoryItem {
@@ -58,6 +89,13 @@ export interface HistoryItem {
 export interface ChatMessage {
     role: 'user' | 'model';
     text: string;
+    image?: string; // base64 data URL
+}
+
+export interface ParsedFile {
+    name: string;
+    text: string;
+    images: string[];
 }
 
 export enum Persona {

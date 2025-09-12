@@ -1,17 +1,14 @@
 
-
 import React from 'react';
 import FileUpload from './FileUpload';
 import Loader from './Loader';
 import Icon from './Icon';
-// FIX: Import IconProps to use for typing FeatureCard icon prop
 import type { IconProps } from './Icon';
-import type { HistoryItem } from '../types';
-// FIX: Import Variants type to correctly type animation variants
+import type { HistoryItem, ParsedFile } from '../types';
 import { motion, type Variants } from 'framer-motion';
 
 interface LandingPageProps {
-    onFileParsed: (text: string, images: string[], name:string) => void;
+    onFilesParsed: (files: ParsedFile[]) => void;
     isLoading: boolean;
     progress: number;
     updateProgress: (value: number | ((prev: number) => number)) => void;
@@ -20,22 +17,19 @@ interface LandingPageProps {
     onLoadFromHistory: (item: HistoryItem) => void;
 }
 
-const FeatureCard: React.FC<{ icon: IconProps['name'], title: string, description: string }> = ({ icon, title, description }) => (
-    <div className="bg-brand-surface p-6 rounded-lg border border-brand-muted backdrop-blur-sm transition-all duration-300 hover:border-brand-cyan/50 hover:-translate-y-1">
-        <div className="flex items-center gap-4">
-            <div className="bg-brand-cyan/10 p-3 rounded-full">
-                <Icon name={icon} className="w-6 h-6 text-brand-cyan" />
-            </div>
-            <div>
-                <h3 className="text-lg font-bold text-brand-text">{title}</h3>
-                <p className="text-sm text-brand-text-muted">{description}</p>
-            </div>
-        </div>
+const Feature: React.FC<{ icon: IconProps['name']; title: string; description: string }> = ({ icon, title, description }) => (
+  <div className="flex items-start gap-4">
+    <div className="flex-shrink-0 bg-brand-muted p-3 rounded-full">
+      <Icon name={icon} className="w-6 h-6 text-brand-cyan" />
     </div>
+    <div>
+      <h3 className="text-lg font-bold text-brand-text">{title}</h3>
+      <p className="text-sm text-brand-text-muted">{description}</p>
+    </div>
+  </div>
 );
 
-
-const LandingPage: React.FC<LandingPageProps> = ({ onFileParsed, isLoading, progress, updateProgress, loadingMessage, history, onLoadFromHistory }) => {
+const LandingPage: React.FC<LandingPageProps> = ({ onFilesParsed, isLoading, progress, updateProgress, loadingMessage, history, onLoadFromHistory }) => {
 
     const formatDate = (timestamp: number) => {
         return new Date(timestamp).toLocaleDateString('en-US', {
@@ -43,65 +37,79 @@ const LandingPage: React.FC<LandingPageProps> = ({ onFileParsed, isLoading, prog
         });
     }
 
-    // FIX: Add Variants type to fix framer-motion type inference issue
     const containerVariants: Variants = {
         hidden: { opacity: 0 },
-        visible: {
-            opacity: 1,
-            transition: {
-                staggerChildren: 0.1
-            }
-        }
+        visible: { opacity: 1, transition: { staggerChildren: 0.08 } }
     };
 
-    // FIX: Add Variants type to fix framer-motion type inference issue
     const itemVariants: Variants = {
         hidden: { y: 20, opacity: 0 },
-        visible: {
-            y: 0,
-            opacity: 1,
-            transition: {
-                type: "spring",
-                stiffness: 100
-            }
-        }
+        visible: { y: 0, opacity: 1, transition: { type: "spring", stiffness: 100 } }
     };
 
-
     return (
-        <div className="container mx-auto px-4 py-16 md:py-24">
-            <div className="flex flex-col items-center text-center">
-                <motion.h1 
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5 }}
-                    className="text-6xl md:text-8xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-brand-cyan to-brand-magenta"
-                >
-                    Prism
-                </motion.h1>
-                <motion.p 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.2 }}
-                    className="max-w-3xl text-lg md:text-xl text-brand-text-muted mt-4 mb-12"
-                >
-                    Your personal AI research assistant for deep literature analysis. Go beyond summarization and engage in a dialogue with science.
-                </motion.p>
+        <div className="container mx-auto px-4 py-12 md:py-20">
+            {/* Hero Section */}
+            <div className="grid lg:grid-cols-2 gap-12 items-center mb-24 md:mb-32">
+                <motion.div initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.7, delay: 0.2 }}>
+                    <h1 className="text-5xl md:text-7xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-brand-cyan to-brand-magenta leading-tight">
+                        Prism
+                    </h1>
+                    <p className="text-lg md:text-xl text-brand-text-muted mt-4 mb-8 max-w-xl">
+                        A state-of-the-art AI research partner. Go beyond summarization to synthesize knowledge, generate ideas, and accelerate your discovery workflow.
+                    </p>
+                    {isLoading ? (
+                        <div className="mt-8"><Loader progress={progress} message={loadingMessage} /></div>
+                    ) : (
+                        <div className="w-full">
+                            <FileUpload onFilesParsed={onFilesParsed} updateProgress={updateProgress} />
+                        </div>
+                    )}
+                </motion.div>
 
-                {isLoading ? (
-                    <Loader progress={progress} message={loadingMessage} />
-                ) : (
-                    <motion.div 
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ duration: 0.5, delay: 0.4 }}
-                        className="w-full"
-                    >
-                        <FileUpload onFileParsed={onFileParsed} updateProgress={updateProgress} />
-                    </motion.div>
-                )}
+                <motion.div 
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.7, delay: 0.4 }}
+                    className="hidden lg:block bg-brand-surface border border-brand-muted rounded-xl p-4"
+                >
+                    <div className="aspect-video bg-brand-bg rounded-lg p-6 flex flex-col gap-4 overflow-hidden">
+                         <div className="flex justify-between items-center">
+                            <h2 className="text-xl font-bold text-brand-text">Analysis Dashboard</h2>
+                            <div className="flex gap-2"><span className="w-3 h-3 bg-red-500 rounded-full"></span><span className="w-3 h-3 bg-yellow-500 rounded-full"></span><span className="w-3 h-3 bg-green-500 rounded-full"></span></div>
+                         </div>
+                         <motion.div initial={{ y: 50 }} animate={{ y: 0 }} transition={{ duration: 0.5, delay: 0.8 }} className="flex-grow bg-brand-muted/50 rounded-md p-4 space-y-3">
+                            <div className="h-4 bg-brand-cyan/50 rounded w-3/4"></div>
+                            <div className="h-3 bg-brand-subtle rounded w-full"></div>
+                            <div className="h-3 bg-brand-subtle rounded w-5/6"></div>
+                         </motion.div>
+                         <motion.div initial={{ y: 50 }} animate={{ y: 0 }} transition={{ duration: 0.5, delay: 1.0 }} className="flex-grow bg-brand-muted/50 rounded-md p-4 space-y-3">
+                            <div className="h-4 bg-brand-magenta/50 rounded w-1/2"></div>
+                            <div className="h-3 bg-brand-subtle rounded w-full"></div>
+                         </motion.div>
+                    </div>
+                </motion.div>
             </div>
             
+            {/* Features Section */}
+            <div className="text-center mb-16">
+                 <h2 className="text-4xl font-bold text-brand-text mb-4">The Ultimate Research Toolkit</h2>
+                 <p className="text-lg text-brand-text-muted max-w-3xl mx-auto">Prism is engineered with a comprehensive suite of AI tools to tackle every stage of your research process, from initial understanding to final presentation.</p>
+            </div>
+
+            <motion.div variants={containerVariants} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} className="grid md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12 max-w-7xl mx-auto">
+                <motion.div variants={itemVariants}><Feature icon="synthesis" title="Cross-Document Synthesis" description="Upload multiple papers to uncover shared themes, conflicting findings, and the evolution of ideas across literature." /></motion.div>
+                <motion.div variants={itemVariants}><Feature icon="chat" title="Multimodal Q&A" description="Chat with your documents and figures. Ask the AI to analyze graphs, diagrams, and tables directly." /></motion.div>
+                <motion.div variants={itemVariants}><Feature icon="flask" title="AI Ideation Lab" description="Generate novel research hypotheses and potential experimental designs based on a paper's findings and limitations." /></motion.div>
+                <motion.div variants={itemVariants}><Feature icon="bibliography" title="Automated Bibliography" description="Extract all citations from a paper and export them in APA or BibTeX format with a single click." /></motion.div>
+                <motion.div variants={itemVariants}><Feature icon="summary" title="Interactive Glossary" description="Hover over any key technical term in the analysis to get an instant, context-aware definition." /></motion.div>
+                <motion.div variants={itemVariants}><Feature icon="brain-circuit" title="Concept Mapping" description="Visualize the core concepts and their relationships in an interactive, force-directed graph." /></motion.div>
+                <motion.div variants={itemVariants}><Feature icon="critique" title="AI-Powered Critique" description="Receive an automated analysis of the paper's strengths, weaknesses, and novelty." /></motion.div>
+                <motion.div variants={itemVariants}><Feature icon="presentation" title="Presentation Generator" description="Create a slide-by-slide presentation draft from the paper in seconds." /></motion.div>
+                <motion.div variants={itemVariants}><Feature icon="search" title="Related Paper Discovery" description="Find similar and relevant research papers powered by Google Search." /></motion.div>
+            </motion.div>
+            
+            {/* History Section */}
             {history.length > 0 && !isLoading && (
                  <motion.div 
                     initial={{ opacity: 0, y: 50 }}
@@ -122,42 +130,6 @@ const LandingPage: React.FC<LandingPageProps> = ({ onFileParsed, isLoading, prog
                     </div>
                 </motion.div>
             )}
-
-             <div className="mt-24 md:mt-32">
-                <motion.h2 
-                     initial={{ opacity: 0, y: 50 }}
-                     animate={{ opacity: 1, y: 0 }}
-                     transition={{ duration: 0.5, delay: 0.2 }}
-                    className="text-4xl font-bold text-center mb-4"
-                >
-                    A Complete Toolkit for Scientific Insight
-                </motion.h2>
-                <motion.p
-                     initial={{ opacity: 0, y: 50 }}
-                     animate={{ opacity: 1, y: 0 }}
-                     transition={{ duration: 0.5, delay: 0.4 }}
-                    className="text-lg text-brand-text-muted text-center max-w-3xl mx-auto mb-12"
-                >
-                    Prism provides a suite of AI-powered features designed to accelerate your research workflow from every angle.
-                </motion.p>
-
-                <motion.div 
-                    variants={containerVariants}
-                    initial="hidden"
-                    animate="visible"
-                    className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto"
-                >
-                    <motion.div variants={itemVariants}><FeatureCard icon="summary" title="Multi-Aspect Summaries" description="Generate tailored summaries for methodology, findings, or problem statements." /></motion.div>
-                    <motion.div variants={itemVariants}><FeatureCard icon="lightbulb" title="Adaptive Explanations" description="Understand complex concepts with explanations adapted to your expertise level." /></motion.div>
-                    <motion.div variants={itemVariants}><FeatureCard icon="critique" title="AI-Powered Critique" description="Receive an automated analysis of the paper's strengths, weaknesses, and novelty." /></motion.div>
-                    <motion.div variants={itemVariants}><FeatureCard icon="chat" title="Interactive Q&A" description="Chat directly with the document to clarify doubts and explore topics in-depth." /></motion.div>
-                    <motion.div variants={itemVariants}><FeatureCard icon="brain-circuit" title="Concept Mapping" description="Visualize the core concepts and their relationships in an interactive graph." /></motion.div>
-                    <motion.div variants={itemVariants}><FeatureCard icon="search" title="Related Paper Discovery" description="Find similar and relevant research papers powered by Google Search." /></motion.div>
-                    <motion.div variants={itemVariants}><FeatureCard icon="quiz" title="Comprehension Quiz" description="Test your understanding with an auto-generated quiz on the paper's key points." /></motion.div>
-                    <motion.div variants={itemVariants}><FeatureCard icon="presentation" title="Presentation Generator" description="Create a slide-by-slide presentation draft from the paper in seconds." /></motion.div>
-                    <motion.div variants={itemVariants}><FeatureCard icon="export" title="Flexible Exporting" description="Export your complete analysis to PDF or Markdown for your records." /></motion.div>
-                </motion.div>
-            </div>
         </div>
     );
 };

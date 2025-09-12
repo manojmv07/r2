@@ -3,19 +3,28 @@ import React, { useState, useEffect } from 'react';
 import { Toaster, toast } from 'react-hot-toast';
 import LandingPage from './components/LandingPage';
 import AnalysisDashboard from './components/AnalysisDashboard';
+import SynthesisDashboard from './components/SynthesisDashboard';
 import Footer from './components/Footer';
 import QuizModal from './components/QuizModal';
 import PresentationModal from './components/PresentationModal';
-import { generateQuiz, validateDocument, generateInitialContent, generateDetailedContent, findRelatedPapers, generateConceptMapData, generatePresentation, resetChat } from './services/geminiService';
+import { 
+    generateQuiz, validateDocument, generateInitialContent, generateDetailedContent, 
+    findRelatedPapers, generateConceptMapData, generatePresentation, resetChat,
+    generateSynthesisReport, generateIdeationContent, extractReferences
+} from './services/geminiService';
 import { getHistory, saveAnalysis } from './services/historyService';
 import { Persona } from './types';
-import type { AnalysisResult, QuizQuestion, HistoryItem, PresentationSlide } from './types';
+import type { AnalysisResult, QuizQuestion, HistoryItem, PresentationSlide, SynthesisResult, ParsedFile } from './types';
 
 const App: React.FC = () => {
+    const [analysisMode, setAnalysisMode] = useState<'none' | 'single' | 'synthesis'>('none');
     const [analysisResult, setAnalysisResult] = useState<Partial<AnalysisResult> | null>(null);
+    const [synthesisResult, setSynthesisResult] = useState<SynthesisResult | null>(null);
+    
     const [documentText, setDocumentText] = useState<string>('');
     const [documentImages, setDocumentImages] = useState<string[]>([]);
     const [fileName, setFileName] = useState<string>('');
+    
     const [isLoading, setIsLoading] = useState(false);
     const [progress, setProgress] = useState(0);
     const [loadingMessage, setLoadingMessage] = useState('');
@@ -33,9 +42,8 @@ const App: React.FC = () => {
         setHistory(getHistory());
     }, []);
     
-    // Save analysis to history whenever a complete result is generated
     useEffect(() => {
-        if (analysisResult?.title && analysisResult?.overallSummary && analysisResult?.critique) {
+        if (analysisMode === 'single' && analysisResult?.title && analysisResult?.overallSummary && analysisResult?.critique) {
             const currentItem: HistoryItem = {
                 id: Date.now().toString(),
                 title: analysisResult.title,
@@ -56,12 +64,13 @@ const App: React.FC = () => {
         handleReset();
     };
 
-    const proceedWithAnalysis = (text: string, images: string[], name: string) => {
+    const proceedWithSingleAnalysis = (text: string, images: string[], name: string) => {
         setProgress(20);
         setLoadingMessage('Generating comprehension quiz...');
         setDocumentText(text);
         setDocumentImages(images);
         setFileName(name);
+        setAnalysisMode('single');
 
         generateQuiz(text)
             .then(questions => {
@@ -72,12 +81,11 @@ const App: React.FC = () => {
             .catch(error => {
                 console.error("Failed to generate quiz:", error);
                 toast.error(`Could not generate quiz: ${error instanceof Error ? error.message : 'Unknown error'}. Starting analysis directly.`);
-                // If quiz fails, skip to analysis
-                runAnalysis(Persona.ENGINEER);
+                runSingleAnalysis(Persona.ENGINEER);
             });
     };
     
-    const runAnalysis = async (persona: Persona) => {
+    const runSingleAnalysis = async (persona: Persona) => {
         setShowQuizModal(false);
         setIsLoading(true);
         setProgress(50);
@@ -86,12 +94,13 @@ const App: React.FC = () => {
         try {
             const initialContent = await generateInitialContent(documentText, persona);
             setProgress(75);
-            setLoadingMessage('Fetching detailed analysis...');
+            setLoadingMessage('Fetching detailed analysis & glossary...');
 
             const partialResult: Partial<AnalysisResult> = { ...initialContent, images: documentImages };
             setAnalysisResult(partialResult);
-            setIsLoading(false);
+            setIsLoading(false); // Initial content is ready, dashboard can render
 
+            // Start fetching detailed content in the background
             generateDetailedContent(documentText, persona).then(detailedContent => {
                 setAnalysisResult(prev => ({ ...prev, ...detailedContent }));
             });
@@ -106,10 +115,39 @@ const App: React.FC = () => {
                 setAnalysisResult(prev => ({ ...prev, conceptMap }));
             });
 
+            generateIdeationContent(documentText).then(ideation => {
+                setAnalysisResult(prev => ({ ...prev, ideation }));
+            });
+
+            extractReferences(documentText).then(references => {
+                setAnalysisResult(prev => ({...prev, references}));
+            });
+
         } catch (e: any) {
             handleGenericError(e);
         }
     };
+    
+    const runSynthesisAnalysis = async (files: ParsedFile[]) => {
+        setIsLoading(true);
+        setProgress(25);
+        setLoadingMessage('Synthesizing multiple documents...');
+        setAnalysisMode('synthesis');
+        const fileNames = files.map(f => f.name).join(', ');
+        setFileName(fileNames);
+
+        try {
+            const result = await generateSynthesisReport(files.map(f => f.text));
+            setSynthesisResult(result);
+            setProgress(100);
+            setLoadingMessage('Synthesis complete!');
+        } catch (e: any) {
+            handleGenericError(e);
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
 
     const handleGeneratePresentation = async () => {
         if (!documentText) {
@@ -132,11 +170,24 @@ const App: React.FC = () => {
     };
 
 
-    const handleFileParsed = async (text: string, images: string[], name: string) => {
+    const handleFilesParsed = async (files: ParsedFile[]) => {
         setIsLoading(true);
         setProgress(10);
-        setLoadingMessage('Validating document...');
+        setLoadingMessage('Validating document(s)...');
         
+        if (files.length === 0) {
+            setIsLoading(false);
+            return;
+        }
+
+        if (files.length > 1) {
+            // For multi-file, we skip validation and quiz and go straight to synthesis
+            runSynthesisAnalysis(files);
+            return;
+        }
+
+        // Single file flow
+        const { text, images, name } = files[0];
         try {
             const validation = await validateDocument(text);
             if (!validation.isPaper) {
@@ -144,7 +195,7 @@ const App: React.FC = () => {
                     <div className="flex flex-col gap-3">
                         <p><b>Warning:</b> This file may not be a research paper. ({validation.reason})</p>
                         <div className="flex gap-2">
-                            <button onClick={() => { toast.dismiss(t.id); proceedWithAnalysis(text, images, name); }} className="w-full bg-green-500 text-white text-sm font-bold p-2 rounded-md">Proceed Anyway</button>
+                            <button onClick={() => { toast.dismiss(t.id); proceedWithSingleAnalysis(text, images, name); }} className="w-full bg-green-500 text-white text-sm font-bold p-2 rounded-md">Proceed Anyway</button>
                             <button onClick={() => { toast.dismiss(t.id); handleReset(); }} className="w-full bg-gray-500 text-white text-sm font-bold p-2 rounded-md">Cancel</button>
                         </div>
                     </div>
@@ -153,7 +204,7 @@ const App: React.FC = () => {
                 setProgress(0);
                 return;
             }
-            proceedWithAnalysis(text, images, name);
+            proceedWithSingleAnalysis(text, images, name);
         } catch (error) {
              console.error("Failed to process document:", error);
              toast.error(`Could not process the document: ${error instanceof Error ? error.message : 'Unknown error'}.`);
@@ -167,10 +218,12 @@ const App: React.FC = () => {
         setFileName(item.fileName);
         setAnalysisResult(item.result);
         setDocumentImages(item.result.images);
+        setAnalysisMode('single');
     };
 
     const handleReset = () => {
         setAnalysisResult(null);
+        setSynthesisResult(null);
         setDocumentText('');
         setDocumentImages([]);
         setFileName('');
@@ -181,8 +234,44 @@ const App: React.FC = () => {
         setShowQuizModal(false);
         resetChat();
         setHistory(getHistory());
+        setAnalysisMode('none');
     };
     
+    const renderContent = () => {
+        if (analysisMode === 'single' && analysisResult) {
+            return (
+                <AnalysisDashboard
+                    result={analysisResult}
+                    documentText={documentText}
+                    fileName={fileName}
+                    onReset={handleReset}
+                    onGeneratePresentation={handleGeneratePresentation}
+                    isGeneratingPresentation={isGeneratingPresentation}
+                />
+            );
+        }
+        if (analysisMode === 'synthesis' && synthesisResult) {
+            return (
+                <SynthesisDashboard 
+                    result={synthesisResult}
+                    fileNames={fileName}
+                    onReset={handleReset}
+                />
+            );
+        }
+        return (
+            <LandingPage
+                onFilesParsed={handleFilesParsed}
+                isLoading={isLoading}
+                progress={progress}
+                updateProgress={setProgress}
+                loadingMessage={loadingMessage}
+                history={history}
+                onLoadFromHistory={handleLoadFromHistory}
+            />
+        );
+    }
+
     return (
         <div className="min-h-screen font-sans">
             <Toaster position="top-center" toastOptions={{
@@ -191,30 +280,11 @@ const App: React.FC = () => {
                 error: { iconTheme: { primary: '#FF00E5', secondary: '#0A0A0F' } },
             }} />
             <main className="relative z-10">
-                {analysisResult ? (
-                    <AnalysisDashboard
-                        result={analysisResult}
-                        documentText={documentText}
-                        fileName={fileName}
-                        onReset={handleReset}
-                        onGeneratePresentation={handleGeneratePresentation}
-                        isGeneratingPresentation={isGeneratingPresentation}
-                    />
-                ) : (
-                    <LandingPage
-                        onFileParsed={handleFileParsed}
-                        isLoading={isLoading}
-                        progress={progress}
-                        updateProgress={setProgress}
-                        loadingMessage={loadingMessage}
-                        history={history}
-                        onLoadFromHistory={handleLoadFromHistory}
-                    />
-                )}
+                {renderContent()}
                 {showQuizModal && !isLoading && (
                     <QuizModal
                         questions={quizQuestions}
-                        onComplete={runAnalysis}
+                        onComplete={runSingleAnalysis}
                     />
                 )}
                 {showPresentationModal && (
