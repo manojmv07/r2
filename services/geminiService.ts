@@ -9,7 +9,9 @@ const API_KEYS = [
     'AIzaSyDsE6eI6fDUo756_ADuRAm1wkUiWSGTupI',
     'AIzaSyDPCJ-ZQIFn88zsyDeIsR7nQGearUEY3z8',
     'AIzaSyBY4PXJnUOSSBxB0wJIYCYDcKJ9AhQsQrU',
-    'AIzaSyDNK5X9mr8AB0wjy9D2gtvpCdQ0FUecj5Y'
+    'AIzaSyDNK5X9mr8AB0wjy9D2gtvpCdQ0FUecj5Y',
+    'AIzaSyBHFWFQDA0kkxobLvoqwV_fc7xHbuRvI00', // New key from different project
+    'AIzaSyAGoeza5zsrOIdvp7aZ-7_FlpnUVYUpcwU'  // New key from different project
 ];
 let currentKeyIndex = 0;
 
@@ -42,15 +44,6 @@ const verifiablePointSchema = {
     required: ['point', 'evidence'],
 };
 
-const initialContentSchema = {
-    type: Type.OBJECT,
-    properties: {
-        title: { type: Type.STRING, description: "The title of the research paper." },
-        takeaways: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A bulleted list of the 3-5 most critical, high-level key takeaways from the paper. Each takeaway should be a single, concise sentence." },
-        overallSummary: { type: Type.STRING, description: "A concise, one-paragraph overall summary of the paper." },
-    },
-};
-
 const glossaryTermSchema = {
     type: Type.OBJECT,
     properties: {
@@ -78,14 +71,17 @@ const referenceSchema = {
     required: ['apa', 'bibtex'],
 };
 
-const comprehensiveAnalysisSchema = {
+const fullAnalysisSchema = {
     type: Type.OBJECT,
     properties: {
+        title: { type: Type.STRING, description: "The title of the research paper." },
+        takeaways: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A bulleted list of the 3-5 most critical, high-level key takeaways from the paper." },
+        overallSummary: { type: Type.STRING, description: "A concise, one-paragraph overall summary of the paper." },
         aspects: {
             type: Type.OBJECT,
             properties: {
                 problemStatement: { type: Type.STRING, description: "Summary of the research gap, motivation, and core problem." },
-                methodology: { type: Type.STRING, description: "Description of the experimental setup, theoretical framework, or model architecture used, referencing figures if applicable." },
+                methodology: { type: Type.STRING, description: "Description of the experimental setup, theoretical framework, or model architecture used." },
                 keyFindings: { type: Type.ARRAY, items: verifiablePointSchema, description: "List of main results and conclusions, each supported by direct evidence." },
             },
         },
@@ -103,23 +99,20 @@ const comprehensiveAnalysisSchema = {
                 comparison: { type: Type.STRING, description: "How the paper differs from established prior art." },
             },
         },
-        futureWork: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A list of actionable research questions or experimental next steps based on the paper's limitations." },
-        glossary: {
-            type: Type.ARRAY,
-            items: glossaryTermSchema,
-            description: "A list of 10-15 key technical terms and their context-specific definitions."
-        },
-        ideation: {
-            type: Type.ARRAY,
-            items: hypothesisSchema,
-            description: "3-4 novel, testable research hypotheses based on the paper's findings and limitations."
-        },
-        references: {
-            ...referenceSchema,
-            description: "All extracted citations formatted in APA and BibTeX."
+        futureWork: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A list of actionable research questions or experimental next steps." },
+        glossary: { type: Type.ARRAY, items: glossaryTermSchema, description: "A list of 10-15 key technical terms and their definitions." },
+        ideation: { type: Type.ARRAY, items: hypothesisSchema, description: "3-4 novel, testable research hypotheses with experimental designs." },
+        references: { ...referenceSchema, description: "All extracted citations formatted in APA and BibTeX." },
+        conceptMap: {
+            type: Type.OBJECT,
+            properties: {
+                nodes: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { id: { type: Type.STRING }, label: { type: Type.STRING } } } },
+                links: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { source: { type: Type.STRING }, target: { type: Type.STRING }, relationship: { type: Type.STRING } } } },
+            },
+            description: "A concept map of the 10-15 most important core concepts in the paper."
         }
     },
-}
+};
 
 const quizSchema = {
     type: Type.OBJECT,
@@ -146,36 +139,6 @@ const validationSchema = {
         reason: { type: Type.STRING, description: "A brief explanation for your decision." }
     },
     required: ['isPaper', 'reason']
-};
-
-const conceptMapSchema = {
-    type: Type.OBJECT,
-    properties: {
-        nodes: {
-            type: Type.ARRAY,
-            items: {
-                type: Type.OBJECT,
-                properties: {
-                    id: { type: Type.STRING, description: "A unique identifier for the concept (e.g., 'neural_networks')." },
-                    label: { type: Type.STRING, description: "The name of the concept (e.g., 'Neural Networks')." },
-                },
-                required: ['id', 'label'],
-            },
-        },
-        links: {
-            type: Type.ARRAY,
-            items: {
-                type: Type.OBJECT,
-                properties: {
-                    source: { type: Type.STRING, description: "The 'id' of the source node." },
-                    target: { type: Type.STRING, description: "The 'id' of the target node." },
-                    relationship: { type: Type.STRING, description: "A brief description of the relationship (e.g., 'is a type of', 'is used for', 'builds upon')." },
-                },
-                required: ['source', 'target', 'relationship'],
-            },
-        },
-    },
-    required: ['nodes', 'links'],
 };
 
 const presentationSchema = {
@@ -294,60 +257,24 @@ export const generateQuiz = async (documentText: string): Promise<QuizQuestion[]
     }
 };
 
-export const generateInitialContent = async (
+export const generateFullAnalysis = async (
     documentText: string,
     persona: Persona
-): Promise<Pick<AnalysisResult, 'title' | 'takeaways' | 'overallSummary'>> => {
-    try {
-        const ai = getAi();
-        const prompt = `You are an expert AI research assistant. Your task is to quickly analyze the following scientific paper and extract the most essential information for this audience: ${persona}.
-        
-        **Tasks:**
-        1. Identify the paper's full **title**.
-        2. Extract the 3-5 most critical, high-level **key takeaways**.
-        3. Write a concise, one-paragraph **overall summary**.
-
-        Scientific Paper Text:
-        ---
-        ${documentText.substring(0, 100000)}
-        ---
-
-        Provide the response in the specified JSON format.`;
-
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-                responseMimeType: 'application/json',
-                responseSchema: initialContentSchema,
-            },
-        });
-        const result = JSON.parse(response.text);
-        chatSummary = result.overallSummary;
-        return result;
-
-    } catch (error) {
-        console.error("Error generating initial content:", error);
-        throw new Error(`Initial analysis failed: ${formatApiError(error)}`);
-    }
-};
-
-export const generateComprehensiveAnalysis = async (
-    documentText: string,
-    persona: Persona
-): Promise<Omit<AnalysisResult, 'title'|'takeaways'|'overallSummary'|'images'|'relatedPapers'|'conceptMap'>> => {
+): Promise<Omit<AnalysisResult, 'images' | 'relatedPapers'>> => {
      try {
         const ai = getAi();
-        const prompt = `You are an expert AI research assistant. Based on the scientific paper below, provide a comprehensive, multi-faceted analysis for this audience: ${persona}.
+        const prompt = `You are an expert AI research assistant. Based on the scientific paper below, provide a complete and comprehensive, multi-faceted analysis for this audience: ${persona}.
         
         **Tasks:**
-        1.  **Aspects:** Analyze the problem statement, methodology, and key findings (with evidence).
-        2.  **Critique:** Identify the paper's strengths and weaknesses (with evidence).
-        3.  **Novelty:** Assess its contribution and compare it to prior art.
+        1.  **Essential Info:** Extract the paper's title, 3-5 key takeaways, and a one-paragraph overall summary.
+        2.  **Detailed Analysis:** Analyze the problem statement, methodology, and key findings (with evidence).
+        3.  **Critique & Novelty:** Identify strengths, weaknesses, assess its contribution, and compare to prior art.
         4.  **Future Work:** Suggest next steps.
-        5.  **Glossary:** Identify 10-15 key technical terms/acronyms and provide concise, context-specific definitions.
-        6.  **Ideation Lab:** Generate 3 novel, testable research hypotheses based on the paper, including a brief experimental design for each.
-        7.  **References:** Find the bibliography section, extract all citations, and format them in both APA 7th edition and BibTeX.
+        5.  **Knowledge Tools:**
+            a. **Glossary:** Identify 10-15 key technical terms and provide context-specific definitions.
+            b. **Ideation Lab:** Generate 3 novel, testable research hypotheses with experimental designs.
+            c. **References:** Extract all citations and format them in both APA 7th and BibTeX.
+            d. **Concept Map:** Generate a concept map of the 10-15 most important core concepts and their relationships.
 
         Scientific Paper Text:
         ---
@@ -361,60 +288,19 @@ export const generateComprehensiveAnalysis = async (
             contents: prompt,
             config: {
                 responseMimeType: 'application/json',
-                responseSchema: comprehensiveAnalysisSchema,
+                responseSchema: fullAnalysisSchema,
             },
         });
         
-        // The API returns 'ideation' as an array of objects with a 'hypothesis' property,
-        // but the type expects `ideation` to be the array itself. We remap it here.
         const result = JSON.parse(response.text);
-        if (result.ideation) {
-            result.ideation = result.ideation.map((item: any) => item);
-        }
-        
+        chatSummary = result.overallSummary; // Set the chat summary context
         return result;
 
     } catch (error) {
-        console.error("Error generating comprehensive analysis:", error);
-        throw new Error(`Comprehensive analysis failed: ${formatApiError(error)}`);
+        console.error("Error generating full analysis:", error);
+        throw new Error(`Full analysis failed: ${formatApiError(error)}`);
     }
 }
-
-export const generateConceptMapData = async (documentText: string): Promise<ConceptMapData> => {
-    try {
-        const ai = getAi();
-        const prompt = `Analyze the following scientific paper and generate a concept map.
-        
-        **Instructions:**
-        1. Identify the 10-15 most important core concepts in the paper (e.g., specific algorithms, theories, datasets, problem domains).
-        2. For each concept, create a node with a unique ID and a clear label.
-        3. Identify the relationships between these concepts and create links. Describe the relationship briefly (e.g., "is a type of", "is used for", "builds upon").
-        4. Ensure the graph is connected and accurately represents the paper's structure.
-
-        **Document Text:**
-        ---
-        ${documentText.substring(0, 32000)}
-        ---
-        
-        Provide the response in the specified JSON format.`;
-        
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-                responseMimeType: 'application/json',
-                responseSchema: conceptMapSchema,
-            },
-        });
-        
-        return JSON.parse(response.text);
-
-    } catch (error) {
-        console.error("Error generating concept map:", error);
-        // This is non-critical, so return an empty map instead of throwing
-        return { nodes: [], links: [] };
-    }
-};
 
 export const findRelatedPapers = async (
     title: string,

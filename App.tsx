@@ -8,9 +8,8 @@ import Footer from './components/Footer';
 import QuizModal from './components/QuizModal';
 import PresentationModal from './components/PresentationModal';
 import { 
-    generateQuiz, validateDocument, generateInitialContent, 
-    findRelatedPapers, generateConceptMapData, generatePresentation, resetChat,
-    generateSynthesisReport, generateComprehensiveAnalysis
+    generateQuiz, validateDocument, findRelatedPapers, generatePresentation, resetChat,
+    generateSynthesisReport, generateFullAnalysis
 } from './services/geminiService';
 import { getHistory, saveAnalysis } from './services/historyService';
 import { Persona } from './types';
@@ -43,6 +42,7 @@ const App: React.FC = () => {
     }, []);
     
     useEffect(() => {
+        // Use a late-arriving piece of data (like critique) to trigger the save.
         if (analysisMode === 'single' && analysisResult?.title && analysisResult?.overallSummary && analysisResult?.critique) {
             const currentItem: HistoryItem = {
                 id: Date.now().toString(),
@@ -55,7 +55,7 @@ const App: React.FC = () => {
             saveAnalysis(currentItem);
             setHistory(getHistory());
         }
-    }, [analysisResult?.critique]); // Using a late-arriving piece of data to trigger save
+    }, [analysisResult?.critique]); 
 
     const handleGenericError = (error: any) => {
         console.error("Operation failed:", error);
@@ -90,35 +90,32 @@ const App: React.FC = () => {
         setShowQuizModal(false);
         setIsLoading(true);
         setProgress(50);
-        setLoadingMessage('Performing initial analysis...');
+        setLoadingMessage('Performing comprehensive analysis...');
         
         try {
-            const initialContent = await generateInitialContent(documentText, persona);
-            setProgress(75);
-            setLoadingMessage('Fetching comprehensive analysis...');
-
-            const partialResult: Partial<AnalysisResult> = { ...initialContent, images: documentImages };
-            setAnalysisResult(partialResult);
-            setIsLoading(false); // Initial content is ready, dashboard can render
-
-            // Start fetching all detailed content in one consolidated call
-            generateComprehensiveAnalysis(documentText, persona).then(comprehensiveContent => {
-                setAnalysisResult(prev => ({ ...prev, ...comprehensiveContent }));
-            });
-
-            // Fetch non-critical, separate data in the background
-            if (initialContent.title && initialContent.overallSummary) {
-                findRelatedPapers(initialContent.title, initialContent.overallSummary).then(relatedPapers => {
+            // Single, consolidated call for all main analysis data
+            const fullAnalysis = await generateFullAnalysis(documentText, persona);
+            
+            const completeResult: Partial<AnalysisResult> = {
+                ...fullAnalysis,
+                images: documentImages,
+            };
+            
+            setAnalysisResult(completeResult);
+            setProgress(100);
+            setLoadingMessage('Analysis complete!');
+            
+            // Fetch related papers in the background as a separate, non-critical step
+            if (fullAnalysis.title && fullAnalysis.overallSummary) {
+                findRelatedPapers(fullAnalysis.title, fullAnalysis.overallSummary).then(relatedPapers => {
                     setAnalysisResult(prev => ({ ...prev, relatedPapers }));
                 });
             }
 
-            generateConceptMapData(documentText).then(conceptMap => {
-                setAnalysisResult(prev => ({ ...prev, conceptMap }));
-            });
-
         } catch (e: any) {
             handleGenericError(e);
+        } finally {
+            setIsLoading(false); // Analysis is fully complete
         }
     };
     
