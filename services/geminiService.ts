@@ -60,7 +60,25 @@ const glossaryTermSchema = {
     required: ["term", "definition"],
 };
 
-const detailedContentSchema = {
+const hypothesisSchema = {
+    type: Type.OBJECT,
+    properties: {
+        hypothesis: { type: Type.STRING, description: "A novel, testable research hypothesis that logically extends from the paper's findings or limitations." },
+        experimentalDesign: { type: Type.STRING, description: "A brief, high-level outline of an experimental design to test this hypothesis, including methodology, key metrics, and control groups." },
+    },
+    required: ['hypothesis', 'experimentalDesign'],
+};
+
+const referenceSchema = {
+    type: Type.OBJECT,
+    properties: {
+        apa: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A list of all extracted citations, formatted in APA 7th edition style." },
+        bibtex: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A list of all extracted citations, formatted as BibTeX entries." },
+    },
+    required: ['apa', 'bibtex'],
+};
+
+const comprehensiveAnalysisSchema = {
     type: Type.OBJECT,
     properties: {
         aspects: {
@@ -91,6 +109,15 @@ const detailedContentSchema = {
             items: glossaryTermSchema,
             description: "A list of 10-15 key technical terms and their context-specific definitions."
         },
+        ideation: {
+            type: Type.ARRAY,
+            items: hypothesisSchema,
+            description: "3-4 novel, testable research hypotheses based on the paper's findings and limitations."
+        },
+        references: {
+            ...referenceSchema,
+            description: "All extracted citations formatted in APA and BibTeX."
+        }
     },
 }
 
@@ -200,33 +227,6 @@ const synthesisSchema = {
     required: ['overallSynthesis', 'commonThemes', 'conflictingFindings', 'conceptEvolution'],
 };
 
-const ideationSchema = {
-    type: Type.OBJECT,
-    properties: {
-        hypotheses: {
-            type: Type.ARRAY,
-            items: {
-                type: Type.OBJECT,
-                properties: {
-                    hypothesis: { type: Type.STRING, description: "A novel, testable research hypothesis that logically extends from the paper's findings or limitations." },
-                    experimentalDesign: { type: Type.STRING, description: "A brief, high-level outline of an experimental design to test this hypothesis, including methodology, key metrics, and control groups." },
-                },
-                required: ['hypothesis', 'experimentalDesign'],
-            }
-        }
-    },
-    required: ['hypotheses']
-};
-
-const referencesSchema = {
-    type: Type.OBJECT,
-    properties: {
-        apa: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A list of all extracted citations, formatted in APA 7th edition style." },
-        bibtex: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A list of all extracted citations, formatted as BibTeX entries." },
-    },
-    required: ['apa', 'bibtex'],
-};
-
 
 const formatApiError = (error: any): string => {
     if (error.message) {
@@ -332,13 +332,13 @@ export const generateInitialContent = async (
     }
 };
 
-export const generateDetailedContent = async (
+export const generateComprehensiveAnalysis = async (
     documentText: string,
     persona: Persona
-): Promise<Omit<AnalysisResult, 'title'|'takeaways'|'overallSummary'|'images'|'relatedPapers'|'conceptMap'|'ideation'|'references'>> => {
+): Promise<Omit<AnalysisResult, 'title'|'takeaways'|'overallSummary'|'images'|'relatedPapers'|'conceptMap'>> => {
      try {
         const ai = getAi();
-        const prompt = `You are an expert AI research assistant continuing an analysis. Based on the scientific paper below, provide a detailed breakdown for this audience: ${persona}.
+        const prompt = `You are an expert AI research assistant. Based on the scientific paper below, provide a comprehensive, multi-faceted analysis for this audience: ${persona}.
         
         **Tasks:**
         1.  **Aspects:** Analyze the problem statement, methodology, and key findings (with evidence).
@@ -346,28 +346,37 @@ export const generateDetailedContent = async (
         3.  **Novelty:** Assess its contribution and compare it to prior art.
         4.  **Future Work:** Suggest next steps.
         5.  **Glossary:** Identify 10-15 key technical terms/acronyms and provide concise, context-specific definitions.
+        6.  **Ideation Lab:** Generate 3 novel, testable research hypotheses based on the paper, including a brief experimental design for each.
+        7.  **References:** Find the bibliography section, extract all citations, and format them in both APA 7th edition and BibTeX.
 
         Scientific Paper Text:
         ---
-        ${documentText.substring(0, 500000)}
+        ${documentText}
         ---
 
-        Provide the detailed analysis in the specified JSON format.`;
+        Provide the complete analysis in the specified JSON format.`;
         
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
             config: {
                 responseMimeType: 'application/json',
-                responseSchema: detailedContentSchema,
+                responseSchema: comprehensiveAnalysisSchema,
             },
         });
         
-        return JSON.parse(response.text);
+        // The API returns 'ideation' as an array of objects with a 'hypothesis' property,
+        // but the type expects `ideation` to be the array itself. We remap it here.
+        const result = JSON.parse(response.text);
+        if (result.ideation) {
+            result.ideation = result.ideation.map((item: any) => item);
+        }
+        
+        return result;
 
     } catch (error) {
-        console.error("Error generating detailed content:", error);
-        throw new Error(`Detailed analysis failed: ${formatApiError(error)}`);
+        console.error("Error generating comprehensive analysis:", error);
+        throw new Error(`Comprehensive analysis failed: ${formatApiError(error)}`);
     }
 }
 
@@ -620,72 +629,5 @@ export const generateSynthesisReport = async (documentTexts: string[]): Promise<
     } catch (error) {
         console.error("Error generating synthesis report:", error);
         throw new Error(`Failed to generate synthesis report: ${formatApiError(error)}`);
-    }
-};
-
-export const generateIdeationContent = async (documentText: string): Promise<Hypothesis[]> => {
-    try {
-        const ai = getAi();
-        const prompt = `You are a creative AI research strategist. Based on the provided scientific paper, your task is to ideate future research directions.
-
-        **Instructions:**
-        1.  Analyze the paper's findings, limitations, and stated future work.
-        2.  Generate 3-4 novel, specific, and testable research hypotheses that logically extend from the paper.
-        3.  For each hypothesis, briefly outline a plausible high-level experimental design to test it.
-        
-        **Document Text:**
-        ---
-        ${documentText.substring(0, 100000)}
-        ---
-        
-        Provide your ideas in the specified JSON format.`;
-
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-                responseMimeType: 'application/json',
-                responseSchema: ideationSchema,
-            },
-        });
-        
-        const result = JSON.parse(response.text);
-        return result.hypotheses;
-
-    } catch (error) {
-        console.error("Error generating ideation content:", error);
-        return [];
-    }
-};
-
-export const extractReferences = async (documentText: string): Promise<Reference> => {
-    try {
-        const ai = getAi();
-        const prompt = `You are a bibliographic assistant. Your task is to find the "References" or "Bibliography" section in the provided text, extract all citations, and format them.
-
-        **Instructions:**
-        1.  Carefully parse the references section of the document.
-        2.  Format each extracted citation into both APA 7th edition and BibTeX format.
-        
-        **Document Text (the end of the document is most relevant):**
-        ---
-        ${documentText.slice(-30000)} 
-        ---
-        
-        Provide the list of formatted citations in the specified JSON format.`;
-        
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-                responseMimeType: 'application/json',
-                responseSchema: referencesSchema,
-            },
-        });
-
-        return JSON.parse(response.text);
-    } catch (error) {
-        console.error("Error extracting references:", error);
-        return { apa: [], bibtex: [] };
     }
 };

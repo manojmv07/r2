@@ -8,9 +8,9 @@ import Footer from './components/Footer';
 import QuizModal from './components/QuizModal';
 import PresentationModal from './components/PresentationModal';
 import { 
-    generateQuiz, validateDocument, generateInitialContent, generateDetailedContent, 
+    generateQuiz, validateDocument, generateInitialContent, 
     findRelatedPapers, generateConceptMapData, generatePresentation, resetChat,
-    generateSynthesisReport, generateIdeationContent, extractReferences
+    generateSynthesisReport, generateComprehensiveAnalysis
 } from './services/geminiService';
 import { getHistory, saveAnalysis } from './services/historyService';
 import { Persona } from './types';
@@ -94,17 +94,18 @@ const App: React.FC = () => {
         try {
             const initialContent = await generateInitialContent(documentText, persona);
             setProgress(75);
-            setLoadingMessage('Fetching detailed analysis & glossary...');
+            setLoadingMessage('Fetching comprehensive analysis...');
 
             const partialResult: Partial<AnalysisResult> = { ...initialContent, images: documentImages };
             setAnalysisResult(partialResult);
             setIsLoading(false); // Initial content is ready, dashboard can render
 
-            // Start fetching detailed content in the background
-            generateDetailedContent(documentText, persona).then(detailedContent => {
-                setAnalysisResult(prev => ({ ...prev, ...detailedContent }));
+            // Start fetching all detailed content in one consolidated call
+            generateComprehensiveAnalysis(documentText, persona).then(comprehensiveContent => {
+                setAnalysisResult(prev => ({ ...prev, ...comprehensiveContent }));
             });
 
+            // Fetch non-critical, separate data in the background
             if (initialContent.title && initialContent.overallSummary) {
                 findRelatedPapers(initialContent.title, initialContent.overallSummary).then(relatedPapers => {
                     setAnalysisResult(prev => ({ ...prev, relatedPapers }));
@@ -113,14 +114,6 @@ const App: React.FC = () => {
 
             generateConceptMapData(documentText).then(conceptMap => {
                 setAnalysisResult(prev => ({ ...prev, conceptMap }));
-            });
-
-            generateIdeationContent(documentText).then(ideation => {
-                setAnalysisResult(prev => ({ ...prev, ideation }));
-            });
-
-            extractReferences(documentText).then(references => {
-                setAnalysisResult(prev => ({...prev, references}));
             });
 
         } catch (e: any) {
@@ -181,12 +174,10 @@ const App: React.FC = () => {
         }
 
         if (files.length > 1) {
-            // For multi-file, we skip validation and quiz and go straight to synthesis
             runSynthesisAnalysis(files);
             return;
         }
 
-        // Single file flow
         const { text, images, name } = files[0];
         try {
             const validation = await validateDocument(text);

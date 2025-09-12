@@ -64,23 +64,13 @@ const LandingPage: React.FC<LandingPageProps> = ({ onFilesParsed, isLoading, pro
                         <motion.div variants={itemVariants} className="flex items-center gap-3 text-brand-text-muted"><Icon name="check-circle" className="w-5 h-5 text-brand-cyan" /> Generate novel hypotheses and outline experiments.</motion.div>
                         <motion.div variants={itemVariants} className="flex items-center gap-3 text-brand-text-muted"><Icon name="check-circle" className="w-5 h-5 text-brand-cyan" /> Chat directly with your data, figures, and tables.</motion.div>
                     </motion.div>
-
-                    <div className="mt-10">
-                        {isLoading ? (
-                            <div className="mt-8"><Loader progress={progress} message={loadingMessage} /></div>
-                        ) : (
-                            <div className="w-full">
-                                <FileUpload onFilesParsed={onFilesParsed} updateProgress={updateProgress} />
-                            </div>
-                        )}
-                    </div>
                 </motion.div>
 
-                <motion.div 
+                 <motion.div 
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.7, delay: 0.4 }}
-                    className="hidden lg:block bg-brand-surface border border-brand-muted rounded-xl p-4"
+                    className="block lg:block bg-brand-surface border border-brand-muted rounded-xl p-4 mt-8 lg:mt-0"
                 >
                     <div className="aspect-video bg-brand-bg rounded-lg p-6 flex flex-col gap-4 overflow-hidden">
                          <div className="flex justify-between items-center">
@@ -100,8 +90,18 @@ const LandingPage: React.FC<LandingPageProps> = ({ onFilesParsed, isLoading, pro
                 </motion.div>
             </div>
             
+            <div className="max-w-3xl mx-auto">
+                {isLoading ? (
+                    <div className="mt-8"><Loader progress={progress} message={loadingMessage} /></div>
+                ) : (
+                    <div className="w-full">
+                        <FileUpload onFilesParsed={onFilesParsed} updateProgress={updateProgress} />
+                    </div>
+                )}
+            </div>
+
             {/* Features Section */}
-            <div className="text-center mb-16">
+            <div className="text-center my-24 md:my-32">
                  <h2 className="text-4xl font-bold text-brand-text mb-4">The Ultimate Research Toolkit</h2>
                  <p className="text-lg text-brand-text-muted max-w-3xl mx-auto">Prism is engineered with a comprehensive suite of AI tools to tackle every stage of your research process, from initial understanding to final presentation.</p>
             </div>
