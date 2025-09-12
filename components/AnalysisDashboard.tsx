@@ -1,7 +1,5 @@
 
-
-import React, { useState } from 'react';
-import { jsPDF } from 'jspdf';
+import React, { useState, useEffect } from 'react';
 import { regenerateSummary } from '../services/geminiService';
 import type { AnalysisResult, VerifiablePoint } from '../types';
 import { Persona, SummaryLength, TechnicalDepth } from '../types';
@@ -11,7 +9,7 @@ import FigureExplainerModal from './FigureExplainerModal';
 import ExportModal from './ExportModal';
 
 interface AnalysisDashboardProps {
-    result: AnalysisResult;
+    result: Partial<AnalysisResult>; // Now accepts partial results for progressive loading
     documentText: string;
     fileName: string;
     onReset: () => void;
@@ -39,16 +37,43 @@ const VerifiablePointDisplay: React.FC<{ item: VerifiablePoint }> = ({ item }) =
     </li>
 );
 
+// Skeleton loader components for a better UX during progressive loading
+const SkeletonParagraph: React.FC = () => (
+    <div className="space-y-2 animate-pulse">
+        <div className="h-4 bg-brand-muted rounded w-full"></div>
+        <div className="h-4 bg-brand-muted rounded w-5/6"></div>
+        <div className="h-4 bg-brand-muted rounded w-3/4"></div>
+    </div>
+);
+
+const SkeletonList: React.FC<{ count?: number }> = ({ count = 3 }) => (
+    <ul className="space-y-4 animate-pulse">
+        {Array.from({ length: count }).map((_, i) => (
+            <li key={i} className="space-y-2">
+                <div className="h-4 bg-brand-muted rounded w-full"></div>
+                <div className="h-3 bg-brand-subtle rounded w-5/6 ml-3"></div>
+            </li>
+        ))}
+    </ul>
+);
+
+
 const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentText, fileName, onReset }) => {
     const [activeTab, setActiveTab] = useState('takeaways');
-    const [summary, setSummary] = useState(result.overallSummary);
+    const [summary, setSummary] = useState(result.overallSummary || '');
     const [isRegenerating, setIsRegenerating] = useState(false);
     
+    useEffect(() => {
+        if (result.overallSummary) {
+            setSummary(result.overallSummary);
+        }
+    }, [result.overallSummary]);
+
     const [persona, setPersona] = useState<Persona>(Persona.ENGINEER);
     const [length, setLength] = useState<SummaryLength>(SummaryLength.DETAILED);
     const [depth, setDepth] = useState<TechnicalDepth>(TechnicalDepth.MEDIUM);
     
-    const [showFigureModal, setShowFigureModal] = useState<string | null>(null); // Holds the image data URL
+    const [showFigureModal, setShowFigureModal] = useState<string | null>(null);
     const [showExportModal, setShowExportModal] = useState(false);
 
     const handleRegenerate = async () => {
@@ -63,18 +88,23 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
         setIsRegenerating(false);
     };
     
+    const isExportDisabled = !result.title || !result.takeaways || !result.critique;
+
     return (
         <div className="min-h-screen p-4 sm:p-6 lg:p-8">
             <header className="flex flex-col sm:flex-row justify-between items-center mb-8 animate-fade-in">
                 <div className="mb-4 sm:mb-0 text-center sm:text-left max-w-3xl">
-                    <h1 className="text-3xl font-bold text-brand-text break-words">{result.title}</h1>
+                    <h1 className="text-3xl font-bold text-brand-text break-words">
+                        {result.title || <div className="h-9 w-96 bg-brand-muted rounded animate-pulse"></div>}
+                    </h1>
                     <p className="text-brand-text-muted truncate">{fileName}</p>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                      <button
                         onClick={() => setShowExportModal(true)}
-                        className="flex items-center space-x-2 bg-brand-muted hover:bg-brand-cyan hover:text-brand-bg text-white font-semibold py-2 px-4 rounded-lg transition-colors"
-                        title="Export Analysis"
+                        disabled={isExportDisabled}
+                        className="flex items-center space-x-2 bg-brand-muted hover:bg-brand-cyan hover:text-brand-bg text-white font-semibold py-2 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={isExportDisabled ? "Please wait for full analysis to complete" : "Export Analysis"}
                     >
                         <span>📥 Export</span>
                     </button>
@@ -101,11 +131,11 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
                             )}
                             <TabButton active={activeTab === 'related'} onClick={() => setActiveTab('related')}>Related Papers</TabButton>
                         </div>
-                        <div className="p-6 min-h-[300px]">
+                        <div className="p-6 min-h-[400px]">
                              {activeTab === 'takeaways' && (
                                 <div className="space-y-6 animate-fade-in">
-                                    <div>
-                                        <h3 className="font-semibold text-brand-text mb-4">Key Takeaways</h3>
+                                    <h3 className="font-semibold text-brand-text mb-4">Key Takeaways</h3>
+                                    {result.takeaways ? (
                                         <ul className="list-none space-y-4">
                                             {result.takeaways.map((takeaway, i) => (
                                                 <li key={i} className="flex items-start gap-3">
@@ -114,7 +144,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
                                                 </li>
                                             ))}
                                         </ul>
-                                    </div>
+                                    ) : <SkeletonList count={4} />}
                                 </div>
                             )}
                             {activeTab === 'overview' && (
@@ -132,7 +162,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
                                                 {Object.entries(TechnicalDepth).map(([key, value]) => <option key={key} value={value}>{key.charAt(0) + key.slice(1).toLowerCase()}</option>)}
                                             </select>
                                         </div>
-                                         <button onClick={handleRegenerate} disabled={isRegenerating} className="mt-4 w-full flex justify-center items-center gap-2 bg-brand-cyan/90 hover:bg-brand-cyan text-brand-bg font-bold py-2 px-4 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                         <button onClick={handleRegenerate} disabled={isRegenerating || !summary} className="mt-4 w-full flex justify-center items-center gap-2 bg-brand-cyan/90 hover:bg-brand-cyan text-brand-bg font-bold py-2 px-4 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                                             {isRegenerating ? 'Regenerating...' : 'Regenerate Summary'}
                                             <Icon name="regenerate" className={`w-5 h-5 ${isRegenerating ? 'animate-spin' : ''}`} />
                                         </button>
@@ -140,21 +170,23 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
 
                                     <div>
                                         <h3 className="font-semibold text-brand-text mb-2">Overall Summary:</h3>
-                                        <p>{summary}</p>
+                                        {summary ? <p>{summary}</p> : <SkeletonParagraph />}
                                     </div>
                                     <div className="pt-4 border-t border-brand-muted/50">
                                         <h4 className="font-semibold text-brand-cyan mb-2">Problem Statement</h4>
-                                        <p className="text-sm">{result.aspects.problemStatement}</p>
+                                        {result.aspects ? <p className="text-sm">{result.aspects.problemStatement}</p> : <SkeletonParagraph />}
                                     </div>
                                     <div className="pt-4 border-t border-brand-muted/50">
                                         <h4 className="font-semibold text-brand-cyan mb-2">Methodology</h4>
-                                        <p className="text-sm">{result.aspects.methodology}</p>
+                                        {result.aspects ? <p className="text-sm">{result.aspects.methodology}</p> : <SkeletonParagraph />}
                                     </div>
                                     <div className="pt-4 border-t border-brand-muted/50">
                                         <h4 className="font-semibold text-brand-cyan mb-2">Key Findings</h4>
-                                        <ul className="list-none space-y-3 text-sm">
-                                            {result.aspects.keyFindings.map((kf, i) => <VerifiablePointDisplay key={i} item={kf} />)}
-                                        </ul>
+                                        {result.aspects ? (
+                                            <ul className="list-none space-y-3 text-sm">
+                                                {result.aspects.keyFindings.map((kf, i) => <VerifiablePointDisplay key={i} item={kf} />)}
+                                            </ul>
+                                        ) : <SkeletonList />}
                                     </div>
                                 </div>
                             )}
@@ -162,15 +194,19 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
                                 <div className="space-y-6 animate-fade-in">
                                     <div>
                                         <h4 className="font-semibold text-green-400 mb-2 flex items-center gap-2"><Icon name="strength" />Strengths</h4>
-                                        <ul className="list-none space-y-3 text-sm">
-                                            {result.critique.strengths.map((s, i) => <VerifiablePointDisplay key={i} item={s} />)}
-                                        </ul>
+                                        {result.critique ? (
+                                            <ul className="list-none space-y-3 text-sm">
+                                                {result.critique.strengths.map((s, i) => <VerifiablePointDisplay key={i} item={s} />)}
+                                            </ul>
+                                        ) : <SkeletonList />}
                                     </div>
                                     <div className="pt-4 border-t border-brand-muted/50">
                                         <h4 className="font-semibold text-red-400 mb-2 flex items-center gap-2"><Icon name="weakness" />Weaknesses</h4>
-                                        <ul className="list-none space-y-3 text-sm">
-                                            {result.critique.weaknesses.map((w, i) => <VerifiablePointDisplay key={i} item={w} />)}
-                                        </ul>
+                                        {result.critique ? (
+                                            <ul className="list-none space-y-3 text-sm">
+                                                {result.critique.weaknesses.map((w, i) => <VerifiablePointDisplay key={i} item={w} />)}
+                                            </ul>
+                                        ) : <SkeletonList />}
                                     </div>
                                 </div>
                             )}
@@ -178,14 +214,20 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
                                  <div className="space-y-6 animate-fade-in">
                                      <div>
                                         <h4 className="font-semibold text-brand-cyan mb-2 flex items-center gap-2"><Icon name="novelty" />Novelty Assessment</h4>
-                                        <p className="text-sm">{result.novelty.assessment}</p>
-                                        <p className="text-xs text-brand-text-muted/70 mt-2">{result.novelty.comparison}</p>
+                                        {result.novelty ? (
+                                            <>
+                                                <p className="text-sm">{result.novelty.assessment}</p>
+                                                <p className="text-xs text-brand-text-muted/70 mt-2">{result.novelty.comparison}</p>
+                                            </>
+                                        ) : <SkeletonParagraph />}
                                     </div>
                                     <div className="pt-4 border-t border-brand-muted/50">
                                         <h4 className="font-semibold text-brand-cyan mb-2 flex items-center gap-2"><Icon name="future" />Future Work</h4>
-                                        <ul className="list-disc list-inside space-y-1 text-sm">
-                                            {result.futureWork.map((fw, i) => <li key={i}>{fw}</li>)}
-                                        </ul>
+                                        {result.futureWork ? (
+                                            <ul className="list-disc list-inside space-y-1 text-sm">
+                                                {result.futureWork.map((fw, i) => <li key={i}>{fw}</li>)}
+                                            </ul>
+                                        ) : <SkeletonList />}
                                     </div>
                                 </div>
                             )}
@@ -207,16 +249,18 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
                              {activeTab === 'related' && (
                                 <div className="animate-fade-in">
                                     <h3 className="font-semibold text-brand-text mb-4">Similar Research Papers</h3>
-                                    <div className="space-y-3">
-                                        {result.relatedPapers.length > 0 ? result.relatedPapers.map((paper, i) => (
-                                            <a href={paper.uri} target="_blank" rel="noopener noreferrer" key={i} className="block p-3 bg-brand-bg/50 hover:bg-brand-muted rounded-md transition-colors group">
-                                                <div className="flex items-center space-x-3">
-                                                    <Icon name="link" className="w-4 h-4 text-brand-subtle flex-shrink-0" />
-                                                    <p className="text-sm text-brand-text-muted group-hover:text-brand-cyan">{paper.title}</p>
-                                                </div>
-                                            </a>
-                                        )) : <p className="text-sm text-brand-text-muted">No related papers found.</p>}
-                                    </div>
+                                    {result.relatedPapers ? (
+                                        <div className="space-y-3">
+                                            {result.relatedPapers.length > 0 ? result.relatedPapers.map((paper, i) => (
+                                                <a href={paper.uri} target="_blank" rel="noopener noreferrer" key={i} className="block p-3 bg-brand-bg/50 hover:bg-brand-muted rounded-md transition-colors group">
+                                                    <div className="flex items-center space-x-3">
+                                                        <Icon name="link" className="w-4 h-4 text-brand-subtle flex-shrink-0" />
+                                                        <p className="text-sm text-brand-text-muted group-hover:text-brand-cyan">{paper.title}</p>
+                                                    </div>
+                                                </a>
+                                            )) : <p className="text-sm text-brand-text-muted">No related papers found.</p>}
+                                        </div>
+                                    ) : <SkeletonList />}
                                     <p className="text-xs text-brand-subtle mt-4">Powered by Google Search</p>
                                 </div>
                             )}
@@ -235,9 +279,9 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
                     onClose={() => setShowFigureModal(null)}
                 />
             )}
-             {showExportModal && (
+             {showExportModal && result.title && (
                 <ExportModal
-                    result={{ ...result, overallSummary: summary }}
+                    result={{ ...result, overallSummary: summary } as AnalysisResult}
                     fileName={fileName}
                     onClose={() => setShowExportModal(false)}
                 />

@@ -1,3 +1,4 @@
+
 export interface VerifiablePoint {
     point: string;
     evidence: string; // Direct quote from the source text
@@ -10,24 +11,24 @@ export interface QuizQuestion {
 }
 
 export interface AnalysisResult {
-    title: string;
-    takeaways: string[]; // High-level, "executive summary" points
-    overallSummary: string;
-    aspects: {
+    title?: string;
+    takeaways?: string[]; // High-level, "executive summary" points
+    overallSummary?: string;
+    aspects?: {
         problemStatement: string;
         methodology: string;
         keyFindings: VerifiablePoint[];
     };
-    critique: {
+    critique?: {
         strengths: VerifiablePoint[];
         weaknesses: VerifiablePoint[];
     };
-    novelty: {
+    novelty?: {
         assessment: string;
         comparison: string;
     };
-    futureWork: string[];
-    relatedPapers: {
+    futureWork?: string[];
+    relatedPapers?: {
         title: string;
         uri: string;
     }[];

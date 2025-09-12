@@ -4,66 +4,93 @@ import LandingPage from './components/LandingPage';
 import AnalysisDashboard from './components/AnalysisDashboard';
 import Footer from './components/Footer';
 import QuizModal from './components/QuizModal';
-import { generateQuiz, generateInitialAnalysis, resetChat } from './services/geminiService';
+import { generateQuiz, validateDocument, generateInitialContent, generateDetailedContent, findRelatedPapers, resetChat } from './services/geminiService';
 import { Persona } from './types';
 import type { AnalysisResult, QuizQuestion } from './types';
 
 const App: React.FC = () => {
-    const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+    const [analysisResult, setAnalysisResult] = useState<Partial<AnalysisResult> | null>(null);
     const [documentText, setDocumentText] = useState<string>('');
     const [documentImages, setDocumentImages] = useState<string[]>([]);
     const [fileName, setFileName] = useState<string>('');
     const [isLoading, setIsLoading] = useState(false);
     const [progress, setProgress] = useState(0);
+    const [loadingMessage, setLoadingMessage] = useState('');
 
     const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
     const [showQuizModal, setShowQuizModal] = useState(false);
 
     const handleGenericError = (error: any) => {
         console.error("Operation failed:", error);
-        const errorMessage = (error instanceof Error && error.message.includes("API key"))
-            ? "The provided Gemini API key appears to be invalid. Please check the key and try again."
-            : (error instanceof Error ? error.message : 'An unknown error occurred.');
+        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
         alert(errorMessage);
-        setIsLoading(false);
-        setProgress(0);
+        handleReset();
     };
     
     const runAnalysis = async (persona: Persona) => {
         setShowQuizModal(false);
         setIsLoading(true);
         setProgress(50);
+        setLoadingMessage('Performing initial analysis...');
+        
         try {
-            const result = await generateInitialAnalysis(documentText, documentImages, persona);
-            setProgress(100);
-            setAnalysisResult({ ...result, images: documentImages });
-            setIsLoading(false);
+            // First, get the essential content quickly.
+            const initialContent = await generateInitialContent(documentText, persona);
+            setProgress(75);
+            setLoadingMessage('Fetching detailed analysis...');
+
+            // Set initial results to render the dashboard immediately.
+            const partialResult: Partial<AnalysisResult> = { ...initialContent, images: documentImages };
+            setAnalysisResult(partialResult);
+            setIsLoading(false); // Switch to dashboard view
+
+            // Concurrently fetch the rest of the data in the background.
+            generateDetailedContent(documentText, persona).then(detailedContent => {
+                setAnalysisResult(prev => ({ ...prev, ...detailedContent }));
+            });
+
+            if (initialContent.title && initialContent.overallSummary) {
+                findRelatedPapers(initialContent.title, initialContent.overallSummary).then(relatedPapers => {
+                    setAnalysisResult(prev => ({ ...prev, relatedPapers }));
+                });
+            }
+
         } catch (e: any) {
             handleGenericError(e);
         }
     };
 
     const handleFileParsed = async (text: string, images: string[], name: string) => {
-        const action = async () => {
-            setIsLoading(true);
-            setProgress(10);
+        setIsLoading(true);
+        setProgress(10);
+        setLoadingMessage('Validating document...');
+        
+        try {
+            const validation = await validateDocument(text);
+            if (!validation.isPaper) {
+                alert(`This file does not appear to be a research paper. Reason: ${validation.reason}`);
+                setIsLoading(false);
+                setProgress(0);
+                return;
+            }
+            
+            setProgress(20);
+            setLoadingMessage('Generating comprehension quiz...');
             setDocumentText(text);
             setDocumentImages(images);
             setFileName(name);
 
-            try {
-                setProgress(20);
-                const questions = await generateQuiz(text);
-                setQuizQuestions(questions);
-                setShowQuizModal(true);
-                setProgress(30);
-            } catch (error) {
-                 console.error("Failed to generate quiz, proceeding with default analysis.", error);
-                 alert(`Could not generate the interactive quiz: ${error instanceof Error ? error.message : 'Unknown error'}. Proceeding with default analysis.`);
-                 await runAnalysis(Persona.ENGINEER);
-            }
-        };
-        await action();
+            const questions = await generateQuiz(text);
+            setQuizQuestions(questions);
+            setShowQuizModal(true);
+            setProgress(30);
+
+        } catch (error) {
+             console.error("Failed to process document:", error);
+             alert(`Could not process the document: ${error instanceof Error ? error.message : 'Unknown error'}.`);
+             setIsLoading(false);
+             setProgress(0);
+        }
     };
 
     const handleReset = () => {
@@ -73,6 +100,7 @@ const App: React.FC = () => {
         setFileName('');
         setIsLoading(false);
         setProgress(0);
+        setLoadingMessage('');
         setQuizQuestions([]);
         setShowQuizModal(false);
         resetChat();
@@ -94,9 +122,10 @@ const App: React.FC = () => {
                         isLoading={isLoading}
                         progress={progress}
                         updateProgress={setProgress}
+                        loadingMessage={loadingMessage}
                     />
                 )}
-                {showQuizModal && (
+                {showQuizModal && !isLoading && (
                     <QuizModal
                         questions={quizQuestions}
                         onComplete={runAnalysis}

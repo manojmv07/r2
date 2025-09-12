@@ -1,19 +1,22 @@
+
 import React, { useState, useEffect } from 'react';
 import { LOADING_MESSAGES } from '../constants';
 
 interface LoaderProps {
     progress: number;
+    message?: string;
 }
 
-const Loader: React.FC<LoaderProps> = ({ progress }) => {
+const Loader: React.FC<LoaderProps> = ({ progress, message }) => {
     const [messageIndex, setMessageIndex] = useState(0);
 
     useEffect(() => {
+        if (message) return; // If a specific message is provided, don't cycle.
         const interval = setInterval(() => {
             setMessageIndex((prevIndex) => (prevIndex + 1) % LOADING_MESSAGES.length);
         }, 2000);
         return () => clearInterval(interval);
-    }, []);
+    }, [message]);
 
     return (
         <div className="flex flex-col items-center justify-center space-y-6 p-8 bg-brand-surface/80 backdrop-blur-sm border border-brand-muted rounded-lg">
@@ -30,7 +33,7 @@ const Loader: React.FC<LoaderProps> = ({ progress }) => {
                 <p className="text-center text-lg text-brand-text font-medium">{`${Math.round(progress)}%`}</p>
             </div>
             <p className="text-center text-brand-text-muted text-sm transition-opacity duration-500">
-                {LOADING_MESSAGES[messageIndex]}
+                {message || LOADING_MESSAGES[messageIndex]}
             </p>
         </div>
     );

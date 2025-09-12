@@ -2,9 +2,6 @@
 import { GoogleGenAI, Type, Chat } from "@google/genai";
 import type { AnalysisResult, ChatMessage, Persona, SummaryLength, TechnicalDepth, QuizQuestion } from '../types';
 
-// The user-provided API key is hardcoded here for simplicity in this school project.
-const API_KEY = "AIzaSyAR2BgYjzwHRuzwmXSU_dFeekix9uhBBTA";
-
 let aiInstance: GoogleGenAI | null = null;
 let chatInstance: Chat | null = null;
 let chatSummary: string | null = null;
@@ -13,16 +10,15 @@ let chatSummary: string | null = null;
 const getAi = (): GoogleGenAI => {
     if (aiInstance) return aiInstance;
 
-    if (!API_KEY) {
-        throw new Error("API_KEY is not set in geminiService.ts. Please add it.");
+    if (!process.env.API_KEY) {
+        throw new Error("API_KEY environment variable is not set. Please ensure it is configured.");
     }
 
     try {
-        aiInstance = new GoogleGenAI({ apiKey: API_KEY });
+        aiInstance = new GoogleGenAI({ apiKey: process.env.API_KEY });
         return aiInstance;
     } catch (e: any) {
         console.error("Error initializing GoogleGenAI:", e.message);
-        // This can happen if the key is structurally invalid.
         throw new Error(`Failed to initialize AI service. Is the API Key format correct?`);
     }
 };
@@ -36,12 +32,18 @@ const verifiablePointSchema = {
     required: ['point', 'evidence'],
 };
 
-const analysisSchema = {
+const initialContentSchema = {
     type: Type.OBJECT,
     properties: {
         title: { type: Type.STRING, description: "The title of the research paper." },
         takeaways: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A bulleted list of the 3-5 most critical, high-level key takeaways from the paper. Each takeaway should be a single, concise sentence." },
         overallSummary: { type: Type.STRING, description: "A concise, one-paragraph overall summary of the paper." },
+    },
+};
+
+const detailedContentSchema = {
+    type: Type.OBJECT,
+    properties: {
         aspects: {
             type: Type.OBJECT,
             properties: {
@@ -66,7 +68,7 @@ const analysisSchema = {
         },
         futureWork: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A list of actionable research questions or experimental next steps based on the paper's limitations." },
     },
-};
+}
 
 const quizSchema = {
     type: Type.OBJECT,
@@ -86,10 +88,20 @@ const quizSchema = {
     },
 };
 
+const validationSchema = {
+    type: Type.OBJECT,
+    properties: {
+        isPaper: { type: Type.BOOLEAN },
+        reason: { type: Type.STRING, description: "A brief explanation for your decision." }
+    },
+    required: ['isPaper', 'reason']
+};
+
+
 const formatApiError = (error: any): string => {
     if (error.message) {
         if (error.message.includes('API key not valid')) {
-            return 'The hardcoded API key is invalid. Please check the key in geminiService.ts.';
+            return 'The provided API key is invalid. Please check your environment configuration.';
         }
         if (error.message.includes('429')) {
              return 'API rate limit exceeded. Please try again in a moment.';
@@ -99,6 +111,30 @@ const formatApiError = (error: any): string => {
     return "An unknown error occurred with the AI service.";
 }
 
+export const validateDocument = async (documentText: string): Promise<{ isPaper: boolean; reason: string }> => {
+    try {
+        const ai = getAi();
+        const prompt = `You are a document classifier. Analyze the provided text and determine if it is a scientific or academic research paper. Consider the structure (abstract, introduction, methods, results, conclusion), language, and presence of citations. Respond ONLY with a JSON object following the specified schema.
+
+        Document Text:
+        ---
+        ${documentText.substring(0, 15000)}
+        ---`;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: validationSchema,
+            },
+        });
+        return JSON.parse(response.text);
+    } catch (error) {
+        console.error("Error validating document:", error);
+        throw new Error(`Failed to validate document: ${formatApiError(error)}`);
+    }
+};
 
 export const generateQuiz = async (documentText: string): Promise<QuizQuestion[]> => {
     try {
@@ -128,42 +164,90 @@ export const generateQuiz = async (documentText: string): Promise<QuizQuestion[]
     }
 };
 
-export const generateInitialAnalysis = async (
-    documentText: string, 
-    images: string[], 
+export const generateInitialContent = async (
+    documentText: string,
     persona: Persona
-): Promise<AnalysisResult> => {
+): Promise<Pick<AnalysisResult, 'title' | 'takeaways' | 'overallSummary'>> => {
     try {
         const ai = getAi();
-        const prompt = `You are an expert AI research assistant. Your task is to perform a comprehensive analysis of the following scientific paper and generate a report in the specified JSON format. The analysis should be tailored for this audience: ${persona}.
-
-        **Crucially, start by identifying the 3-5 most important "Key Takeaways" from the entire paper. These should be high-level, executive summary points.**
-
-        Based on the full text of the paper provided below, generate a complete analysis. Ground all claims in evidence from the text.
+        const prompt = `You are an expert AI research assistant. Your task is to quickly analyze the following scientific paper and extract the most essential information for this audience: ${persona}.
+        
+        **Tasks:**
+        1. Identify the paper's full **title**.
+        2. Extract the 3-5 most critical, high-level **key takeaways**.
+        3. Write a concise, one-paragraph **overall summary**.
 
         Scientific Paper Text:
         ---
-        ${documentText.substring(0, 500000)} 
+        ${documentText.substring(0, 100000)}
         ---
 
-        Provide the final comprehensive analysis in the specified JSON format.`;
+        Provide the response in the specified JSON format.`;
 
-        const mainAnalysisResponse = await ai.models.generateContent({
+        const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
             config: {
                 responseMimeType: 'application/json',
-                responseSchema: analysisSchema,
+                responseSchema: initialContentSchema,
+            },
+        });
+        const result = JSON.parse(response.text);
+        chatSummary = result.overallSummary; // Save summary for chat
+        return result;
+
+    } catch (error) {
+        console.error("Error generating initial content:", error);
+        throw new Error(`Initial analysis failed: ${formatApiError(error)}`);
+    }
+};
+
+export const generateDetailedContent = async (
+    documentText: string,
+    persona: Persona
+): Promise<Omit<AnalysisResult, 'title'|'takeaways'|'overallSummary'|'images'|'relatedPapers'>> => {
+     try {
+        const ai = getAi();
+        const prompt = `You are an expert AI research assistant continuing an analysis. Based on the scientific paper below, provide a detailed breakdown for this audience: ${persona}.
+        
+        **Tasks:**
+        1.  **Aspects:** Analyze the problem statement, methodology, and key findings (with evidence).
+        2.  **Critique:** Identify the paper's strengths and weaknesses (with evidence).
+        3.  **Novelty:** Assess its contribution and compare it to prior art.
+        4.  **Future Work:** Suggest next steps.
+
+        Scientific Paper Text:
+        ---
+        ${documentText.substring(0, 500000)}
+        ---
+
+        Provide the detailed analysis in the specified JSON format.`;
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: detailedContentSchema,
             },
         });
         
-        const mainResult = JSON.parse(mainAnalysisResponse.text);
+        return JSON.parse(response.text);
 
-        // Save summary for chat
-        chatSummary = mainResult.overallSummary;
+    } catch (error) {
+        console.error("Error generating detailed content:", error);
+        throw new Error(`Detailed analysis failed: ${formatApiError(error)}`);
+    }
+}
 
-        // --- Google Search Step ---
-        const searchPrompt = `Based on the title "${mainResult.title}" and summary "${mainResult.overallSummary}", find 5 highly relevant and recent scientific papers.`;
+export const findRelatedPapers = async (
+    title: string,
+    summary: string
+): Promise<AnalysisResult['relatedPapers']> => {
+    try {
+        const ai = getAi();
+        const searchPrompt = `Based on the title "${title}" and summary "${summary}", find 5 highly relevant and recent scientific papers.`;
+        
         const searchResponse = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: searchPrompt,
@@ -177,15 +261,15 @@ export const generateInitialAnalysis = async (
             .map((chunk: any) => chunk.web)
             .filter((web: any) => web && web.uri && web.title)
             .map(({ uri, title }: { uri: string; title: string }) => ({ uri, title }));
-
-        return { ...mainResult, relatedPapers } as AnalysisResult;
+            
+        return relatedPapers;
 
     } catch (error) {
-        console.error("Error generating initial analysis:", error);
-        throw new Error(`Analysis failed: ${formatApiError(error)}`);
+        console.error("Error finding related papers:", error);
+        // This is a non-critical enhancement, so we don't throw.
+        return [];
     }
 };
-
 
 export const regenerateSummary = async (
     documentText: string,

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import FileUpload from './FileUpload';
 import Loader from './Loader';
@@ -8,6 +9,7 @@ interface LandingPageProps {
     isLoading: boolean;
     progress: number;
     updateProgress: (value: number | ((prev: number) => number)) => void;
+    loadingMessage: string;
 }
 
 const FeatureCard: React.FC<{ icon: 'summary' | 'lightbulb' | 'critique' | 'chat', title: string, description: string }> = ({ icon, title, description }) => (
@@ -35,7 +37,7 @@ const HowItWorksStep: React.FC<{ number: string, title: string, description: str
 );
 
 
-const LandingPage: React.FC<LandingPageProps> = ({ onFileParsed, isLoading, progress, updateProgress }) => {
+const LandingPage: React.FC<LandingPageProps> = ({ onFileParsed, isLoading, progress, updateProgress, loadingMessage }) => {
 
     return (
         <div className="container mx-auto px-4 py-16 md:py-24">
@@ -48,7 +50,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onFileParsed, isLoading, prog
                 </p>
 
                 {isLoading ? (
-                    <Loader progress={progress} />
+                    <Loader progress={progress} message={loadingMessage} />
                 ) : (
                     <div className="w-full animate-fade-in" style={{ animationDelay: '400ms' }}>
                         <FileUpload onFileParsed={onFileParsed} updateProgress={updateProgress} />
