@@ -5,7 +5,6 @@ import AnalysisDashboard from './components/AnalysisDashboard';
 import Footer from './components/Footer';
 import QuizModal from './components/QuizModal';
 import { generateQuiz, generateInitialAnalysis, resetChat } from './services/geminiService';
-// FIX: 'Persona' is an enum used as a value, so it must be imported without 'type'.
 import { Persona } from './types';
 import type { AnalysisResult, QuizQuestion } from './types';
 
@@ -19,6 +18,31 @@ const App: React.FC = () => {
 
     const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
     const [showQuizModal, setShowQuizModal] = useState(false);
+
+    const handleError = (error: any) => {
+        console.error("Operation failed:", error);
+        // Provide a user-friendly message for the most common issue.
+        const errorMessage = (error instanceof Error && error.message.includes("API key"))
+            ? "The Gemini API key is either missing or invalid. Please ensure it is set correctly as an environment variable in your deployment settings (e.g., Vercel)."
+            : (error instanceof Error ? error.message : 'An unknown error occurred.');
+        alert(errorMessage);
+        setIsLoading(false);
+        setProgress(0);
+    };
+    
+    const runAnalysis = async (persona: Persona) => {
+        setShowQuizModal(false);
+        setIsLoading(true);
+        setProgress(50);
+        try {
+            const result = await generateInitialAnalysis(documentText, documentImages, persona);
+            setProgress(100);
+            setAnalysisResult({ ...result, images: documentImages });
+            setIsLoading(false);
+        } catch (e: any) {
+            handleError(e);
+        }
+    };
 
     const handleFileParsed = async (text: string, images: string[], name: string) => {
         setIsLoading(true);
@@ -34,33 +58,13 @@ const App: React.FC = () => {
             setShowQuizModal(true);
             setProgress(30);
         } catch (error) {
-            console.error("Failed to generate quiz, proceeding with default analysis.", error);
-            alert(`Could not generate quiz: ${error instanceof Error ? error.message : 'Unknown error'}`);
-            // If quiz fails, just run the analysis with a default persona
-            await runAnalysis(Persona.ENGINEER);
+             console.error("Failed to generate quiz, proceeding with default analysis.", error);
+             // If quiz fails for any reason (including API key), show an alert and proceed.
+             alert(`Could not generate the interactive quiz: ${error instanceof Error ? error.message : 'Unknown error'}. Proceeding with default analysis.`);
+             await runAnalysis(Persona.ENGINEER);
         }
     };
 
-    const runAnalysis = async (persona: Persona) => {
-        setShowQuizModal(false);
-        setIsLoading(true);
-        setProgress(50); // Set to intermediate state for single analysis call
-        try {
-            const result = await generateInitialAnalysis(documentText, documentImages, persona);
-            
-            setProgress(100);
-            setAnalysisResult({ ...result, images: documentImages });
-
-        } catch (e: any) {
-            // Handle analysis error, maybe show a toast
-            console.error("Analysis failed:", e);
-            alert(`${e.message || 'An unknown error occurred during analysis.'}`);
-            setProgress(0); // Reset on error
-        } finally {
-            setIsLoading(false);
-        }
-    };
-    
     const handleReset = () => {
         setAnalysisResult(null);
         setDocumentText('');

@@ -2,15 +2,29 @@
 import { GoogleGenAI, Type, Chat } from "@google/genai";
 import type { AnalysisResult, ChatMessage, Persona, SummaryLength, TechnicalDepth, QuizQuestion } from '../types';
 
-if (!process.env.API_KEY) {
-    console.error("API_KEY environment variable not set.");
-    // In a real app, you might want to throw an error or handle this more gracefully
-}
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
+let aiInstance: GoogleGenAI | null = null;
 let chatInstance: Chat | null = null;
 let chatSummary: string | null = null;
+
+// A singleton getter for the GoogleGenAI instance.
+const getAi = (): GoogleGenAI => {
+    if (aiInstance) return aiInstance;
+
+    // The API key MUST be provided via the environment variable.
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+        throw new Error("The API_KEY environment variable is not set. Please configure it in your deployment environment (e.g., Vercel).");
+    }
+
+    try {
+        aiInstance = new GoogleGenAI({ apiKey });
+        return aiInstance;
+    } catch (e: any) {
+        console.error("Error initializing GoogleGenAI:", e.message);
+        // This can happen if the key is structurally invalid on creation.
+        throw new Error(`Failed to initialize AI service: ${e.message}`);
+    }
+};
 
 const verifiablePointSchema = {
     type: Type.OBJECT,
@@ -74,7 +88,7 @@ const quizSchema = {
 const formatApiError = (error: any): string => {
     if (error.message) {
         if (error.message.includes('API key not valid')) {
-            return 'An invalid API key was provided. Please ensure your API_KEY is set correctly.';
+            return 'The provided API key is invalid. Please check the environment variable in your deployment settings.';
         }
         if (error.message.includes('429')) {
              return 'API rate limit exceeded. Please try again in a moment.';
@@ -87,6 +101,7 @@ const formatApiError = (error: any): string => {
 
 export const generateQuiz = async (documentText: string): Promise<QuizQuestion[]> => {
     try {
+        const ai = getAi();
         const prompt = `Based on the following scientific paper text, generate a 5-question multiple-choice quiz to test a reader's comprehension. Each question should have 4 options. Ensure the questions cover key concepts, methodologies, and findings from the paper.
 
         Document Text:
@@ -118,6 +133,7 @@ export const generateInitialAnalysis = async (
     persona: Persona
 ): Promise<AnalysisResult> => {
     try {
+        const ai = getAi();
         const prompt = `You are an expert AI research assistant. Your task is to perform a comprehensive analysis of the following scientific paper and generate a report in the specified JSON format. The analysis should be tailored for this audience: ${persona}.
 
         **Crucially, start by identifying the 3-5 most important "Key Takeaways" from the entire paper. These should be high-level, executive summary points.**
@@ -177,6 +193,7 @@ export const regenerateSummary = async (
     depth: TechnicalDepth
 ): Promise<string> => {
      try {
+        const ai = getAi();
         const prompt = `Based on the provided scientific paper text, generate a new summary.
         
         **Instructions:**
@@ -206,6 +223,7 @@ export const regenerateSummary = async (
 
 export const explainFigure = async (documentText: string, image: string): Promise<string> => {
     try {
+        const ai = getAi();
         const prompt = `The user has selected a specific figure from a scientific paper. Based on the overall document context and the provided image, explain what this figure represents. Describe its components, what the data shows, and its significance to the paper's main arguments.
 
         Document Context (abbreviated):
@@ -236,6 +254,7 @@ export const explainFigure = async (documentText: string, image: string): Promis
 
 
 export const getChatStream = async (history: ChatMessage[], newMessage: string, documentText: string) => {
+    const ai = getAi();
     if (!chatInstance) {
         // One-time generation of a summary for chat context if not already done
         if (!chatSummary) {
