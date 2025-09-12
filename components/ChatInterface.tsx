@@ -8,9 +8,10 @@ import AttachFigureModal from './AttachFigureModal';
 interface ChatInterfaceProps {
     documentText: string;
     figures: string[];
+    overallSummary: string;
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ documentText, figures }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ documentText, figures, overallSummary }) => {
     const [history, setHistory] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -38,7 +39,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ documentText, figures }) 
         setIsLoading(true);
 
         try {
-            const stream = await getChatStream(history, newUserMessage, documentText);
+            const stream = await getChatStream(history, newUserMessage, overallSummary);
             
             let modelResponse = '';
             setHistory(prev => [...prev, { role: 'model', text: '' }]);

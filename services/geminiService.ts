@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type, Chat, Part } from "@google/genai";
-import type { AnalysisResult, ChatMessage, Persona, SummaryLength, TechnicalDepth, QuizQuestion, ConceptMapData, PresentationSlide, SynthesisResult, Hypothesis, Reference, GlossaryTerm } from '../types';
+import type { AnalysisResult, ChatMessage, Persona, SummaryLength, TechnicalDepth, QuizQuestion, PresentationSlide, SynthesisResult, Reference } from '../types';
 
 // Hardcoded API keys with a round-robin rotation to distribute requests.
 const API_KEYS = [
@@ -10,8 +10,8 @@ const API_KEYS = [
     'AIzaSyDPCJ-ZQIFn88zsyDeIsR7nQGearUEY3z8',
     'AIzaSyBY4PXJnUOSSBxB0wJIYCYDcKJ9AhQsQrU',
     'AIzaSyDNK5X9mr8AB0wjy9D2gtvpCdQ0FUecj5Y',
-    'AIzaSyBHFWFQDA0kkxobLvoqwV_fc7xHbuRvI00', // New key from different project
-    'AIzaSyAGoeza5zsrOIdvp7aZ-7_FlpnUVYUpcwU'  // New key from different project
+    'AIzaSyBHFWFQDA0kkxobLvoqwV_fc7xHbuRvI00',
+    'AIzaSyAGoeza5zsrOIdvp7aZ-7_FlpnUVYUpcwU'
 ];
 let currentKeyIndex = 0;
 
@@ -23,7 +23,6 @@ const getNextApiKey = (): string => {
 };
 
 let chatInstance: Chat | null = null;
-let chatSummary: string | null = null;
 
 const getAi = (): GoogleGenAI => {
     const apiKey = getNextApiKey();
@@ -71,7 +70,7 @@ const referenceSchema = {
     required: ['apa', 'bibtex'],
 };
 
-const fullAnalysisSchema = {
+const coreAnalysisSchema = {
     type: Type.OBJECT,
     properties: {
         title: { type: Type.STRING, description: "The title of the research paper." },
@@ -85,6 +84,12 @@ const fullAnalysisSchema = {
                 keyFindings: { type: Type.ARRAY, items: verifiablePointSchema, description: "List of main results and conclusions, each supported by direct evidence." },
             },
         },
+    },
+};
+
+const advancedAnalysisSchema = {
+    type: Type.OBJECT,
+    properties: {
         critique: {
             type: Type.OBJECT,
             properties: {
@@ -102,43 +107,46 @@ const fullAnalysisSchema = {
         futureWork: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A list of actionable research questions or experimental next steps." },
         glossary: { type: Type.ARRAY, items: glossaryTermSchema, description: "A list of 10-15 key technical terms and their definitions." },
         ideation: { type: Type.ARRAY, items: hypothesisSchema, description: "3-4 novel, testable research hypotheses with experimental designs." },
+    }
+};
+
+const referencesOnlySchema = {
+    type: Type.OBJECT,
+    properties: {
         references: { ...referenceSchema, description: "All extracted citations formatted in APA and BibTeX." },
-        conceptMap: {
-            type: Type.OBJECT,
-            properties: {
-                nodes: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { id: { type: Type.STRING }, label: { type: Type.STRING } } } },
-                links: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { source: { type: Type.STRING }, target: { type: Type.STRING }, relationship: { type: Type.STRING } } } },
-            },
-            description: "A concept map of the 10-15 most important core concepts in the paper."
-        }
     },
 };
 
-const quizSchema = {
-    type: Type.OBJECT,
+const validationQuizSchema = {
+     type: Type.OBJECT,
     properties: {
-        questions: {
-            type: Type.ARRAY,
-            items: {
-                type: Type.OBJECT,
-                properties: {
-                    question: { type: Type.STRING },
-                    options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                    answer: { type: Type.STRING, description: "The correct option text from the 'options' array." },
+        validation: {
+            type: Type.OBJECT,
+            properties: {
+                isPaper: { type: Type.BOOLEAN },
+                reason: { type: Type.STRING, description: "A brief explanation for the validation decision." }
+            },
+            required: ['isPaper', 'reason']
+        },
+        quiz: {
+             type: Type.OBJECT,
+             properties: {
+                questions: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            question: { type: Type.STRING },
+                            options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                            answer: { type: Type.STRING, description: "The correct option text from the 'options' array." },
+                        },
+                         required: ['question', 'options', 'answer'],
+                    },
                 },
-                 required: ['question', 'options', 'answer'],
             },
         },
     },
-};
-
-const validationSchema = {
-    type: Type.OBJECT,
-    properties: {
-        isPaper: { type: Type.BOOLEAN },
-        reason: { type: Type.STRING, description: "A brief explanation for your decision." }
-    },
-    required: ['isPaper', 'reason']
+    required: ['validation', 'quiz']
 };
 
 const presentationSchema = {
@@ -190,7 +198,6 @@ const synthesisSchema = {
     required: ['overallSynthesis', 'commonThemes', 'conflictingFindings', 'conceptEvolution'],
 };
 
-
 const formatApiError = (error: any): string => {
     if (error.message) {
         if (error.message.includes('API key not valid')) {
@@ -204,103 +211,150 @@ const formatApiError = (error: any): string => {
     return "An unknown error occurred with the AI service.";
 }
 
-export const validateDocument = async (documentText: string): Promise<{ isPaper: boolean; reason: string }> => {
+export const validateAndGenerateQuiz = async (documentText: string): Promise<{ validation: { isPaper: boolean; reason: string }; quiz: { questions: QuizQuestion[] } }> => {
     try {
         const ai = getAi();
-        const prompt = `You are a document classifier. Analyze the provided text and determine if it is a scientific or academic research paper. Consider the structure (abstract, introduction, methods, results, conclusion), language, and presence of citations. Respond ONLY with a JSON object following the specified schema.
-
-        Document Text:
-        ---
-        ${documentText.substring(0, 15000)}
-        ---`;
-
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-                responseMimeType: 'application/json',
-                responseSchema: validationSchema,
-            },
-        });
-        return JSON.parse(response.text);
-    } catch (error) {
-        console.error("Error validating document:", error);
-        throw new Error(`Failed to validate document: ${formatApiError(error)}`);
-    }
-};
-
-export const generateQuiz = async (documentText: string): Promise<QuizQuestion[]> => {
-    try {
-        const ai = getAi();
-        const prompt = `Based on the following scientific paper text, generate a 5-question multiple-choice quiz to test a reader's comprehension. Each question should have 4 options. Ensure the questions cover key concepts, methodologies, and findings from the paper.
-
-        Document Text:
-        ---
-        ${documentText.substring(0, 32000)}
-        ---
+        const prompt = `You are an AI assistant performing an initial check on a document.
         
-        Provide the quiz in the specified JSON format.`;
+        **Pipeline Steps:**
+        1.  **Validation:** First, determine if the document is a scientific research paper.
+        2.  **Quiz Generation:** If it is a paper, generate a 5-question multiple-choice quiz to test comprehension.
+
+        **Instructions:**
+        -   If validation fails (it's not a paper), set the 'isPaper' flag to false, provide a reason, and the 'quiz' object can be null or empty.
+        -   If validation passes, complete both steps.
+        -   Respond with a single JSON object that strictly follows the specified schema.
+
+        **Document Text (first 50000 characters):**
+        ---
+        ${documentText.substring(0, 50000)}
+        ---
+
+        Provide the validation and quiz result in the specified JSON format.`;
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: validationQuizSchema,
+            },
+        });
+        
+        return JSON.parse(response.text);
+
+    } catch (error) {
+        console.error("Error in validation and quiz generation:", error);
+        throw new Error(`Initial document check failed: ${formatApiError(error)}`);
+    }
+};
+
+export const generateCoreAnalysis = async (documentText: string, persona: Persona): Promise<Pick<AnalysisResult, 'title' | 'takeaways' | 'overallSummary' | 'aspects'>> => {
+    try {
+        const ai = getAi();
+        const prompt = `You are an expert AI research assistant. Your audience is ${persona}.
+        
+        **Task:**
+        Perform a core analysis of the provided document. Extract only the following essential information:
+        - Title
+        - 3-5 Key Takeaways
+        - A concise Overall Summary
+        - Detailed aspects (Problem Statement, Methodology, Key Findings with evidence).
+        
+        **Document Text:**
+        ---
+        ${documentText.substring(0, 100000)}
+        ---
+
+        Provide the core analysis in the specified JSON format.`;
 
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
             config: {
                 responseMimeType: 'application/json',
-                responseSchema: quizSchema,
+                responseSchema: coreAnalysisSchema,
             },
         });
-        const result = JSON.parse(response.text);
-        return result.questions;
+
+        return JSON.parse(response.text);
+
     } catch (error) {
-        console.error("Error generating quiz:", error);
-        throw new Error(`Failed to generate quiz: ${formatApiError(error)}`);
+        console.error("Error generating core analysis:", error);
+        throw new Error(`Core analysis failed: ${formatApiError(error)}`);
     }
 };
 
-export const generateFullAnalysis = async (
-    documentText: string,
-    persona: Persona
-): Promise<Omit<AnalysisResult, 'images' | 'relatedPapers'>> => {
+export const generateAdvancedAnalysis = async (documentText: string, persona: Persona): Promise<Pick<AnalysisResult, 'critique' | 'novelty' | 'futureWork' | 'glossary' | 'ideation'>> => {
      try {
         const ai = getAi();
-        const prompt = `You are an expert AI research assistant. Based on the scientific paper below, provide a complete and comprehensive, multi-faceted analysis for this audience: ${persona}.
+        const prompt = `You are an expert AI research assistant. Your audience is ${persona}.
         
-        **Tasks:**
-        1.  **Essential Info:** Extract the paper's title, 3-5 key takeaways, and a one-paragraph overall summary.
-        2.  **Detailed Analysis:** Analyze the problem statement, methodology, and key findings (with evidence).
-        3.  **Critique & Novelty:** Identify strengths, weaknesses, assess its contribution, and compare to prior art.
-        4.  **Future Work:** Suggest next steps.
-        5.  **Knowledge Tools:**
-            a. **Glossary:** Identify 10-15 key technical terms and provide context-specific definitions.
-            b. **Ideation Lab:** Generate 3 novel, testable research hypotheses with experimental designs.
-            c. **References:** Extract all citations and format them in both APA 7th and BibTeX.
-            d. **Concept Map:** Generate a concept map of the 10-15 most important core concepts and their relationships.
+        **Task:**
+        Perform an advanced analysis of the provided document. Extract only the following information:
+        - A critique (Strengths and Weaknesses with evidence).
+        - A novelty assessment.
+        - Future work suggestions.
+        - A glossary of key terms.
+        - An 'ideation lab' of new hypotheses.
+        
+        **Document Text:**
+        ---
+        ${documentText.substring(0, 100000)}
+        ---
 
-        Scientific Paper Text:
+        Provide the advanced analysis in the specified JSON format.`;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: advancedAnalysisSchema,
+            },
+        });
+
+        return JSON.parse(response.text);
+
+    } catch (error) {
+        console.error("Error generating advanced analysis:", error);
+        throw new Error(`Advanced analysis failed: ${formatApiError(error)}`);
+    }
+};
+
+export const generateReferences = async (documentText: string): Promise<Pick<AnalysisResult, 'references'>> => {
+     try {
+        const ai = getAi();
+        const prompt = `You are a bibliography expert AI.
+        
+        **Task:**
+        Scan the entire document text and extract all citations from the 'References' or 'Bibliography' section. Format each citation in both APA 7th edition and BibTeX format.
+        
+        **Document Text:**
         ---
         ${documentText}
         ---
 
-        Provide the complete analysis in the specified JSON format.`;
-        
+        Provide the extracted references in the specified JSON format.`;
+
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
             config: {
                 responseMimeType: 'application/json',
-                responseSchema: fullAnalysisSchema,
+                responseSchema: referencesOnlySchema,
             },
         });
         
-        const result = JSON.parse(response.text);
-        chatSummary = result.overallSummary; // Set the chat summary context
-        return result;
+        return JSON.parse(response.text);
 
     } catch (error) {
-        console.error("Error generating full analysis:", error);
-        throw new Error(`Full analysis failed: ${formatApiError(error)}`);
+        console.error("Error generating references:", error);
+        // Return an empty object on failure so it doesn't break the UI
+        return { references: { apa: [], bibtex: [] } };
     }
-}
+};
+
 
 export const findRelatedPapers = async (
     title: string,
@@ -398,22 +452,9 @@ export const explainFigure = async (documentText: string, image: string): Promis
     }
 };
 
-
-export const getChatStream = async (history: ChatMessage[], newMessage: ChatMessage, documentText: string) => {
+export const getChatStream = async (history: ChatMessage[], newMessage: ChatMessage, overallSummary: string) => {
     const ai = getAi();
     if (!chatInstance) {
-        if (!chatSummary) {
-             const summaryPrompt = `Create a concise, dense, fact-based summary of the following document. It will be used as a context for a Q&A chat, so include key terms, methodologies, and findings.
-             
-             Document Text:
-             ---
-             ${documentText.substring(0, 32000)}
-             ---
-             `;
-             const summaryResponse = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: summaryPrompt });
-             chatSummary = summaryResponse.text;
-        }
-
         chatInstance = ai.chats.create({
             model: 'gemini-2.5-flash',
             config: {
@@ -421,7 +462,7 @@ export const getChatStream = async (history: ChatMessage[], newMessage: ChatMess
                 
                 Document Summary:
                 ---
-                ${chatSummary}
+                ${overallSummary}
                 ---
                 `,
             }
@@ -444,7 +485,6 @@ export const getChatStream = async (history: ChatMessage[], newMessage: ChatMess
 
 export const resetChat = () => {
     chatInstance = null;
-    chatSummary = null;
 };
 
 export const generatePresentation = async (documentText: string): Promise<PresentationSlide[]> => {

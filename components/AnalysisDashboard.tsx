@@ -8,7 +8,6 @@ import Icon from './Icon';
 import ChatInterface from './ChatInterface';
 import FigureExplainerModal from './FigureExplainerModal';
 import ExportModal from './ExportModal';
-import ConceptMap from './ConceptMap';
 import HighlightableText from './HighlightableText';
 import useCopyToClipboard from '../hooks/useCopyToClipboard';
 
@@ -165,7 +164,6 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
                             <TabButton active={activeTab === 'overview'} onClick={() => setActiveTab('overview')}>Overview</TabButton>
                             <TabButton active={activeTab === 'critique'} onClick={() => setActiveTab('critique')}>Critique</TabButton>
                             <TabButton active={activeTab === 'ideation'} onClick={() => setActiveTab('ideation')}><Icon name="flask" className="w-4 h-4" />Ideation Lab</TabButton>
-                            <TabButton active={activeTab === 'concept-map'} onClick={() => setActiveTab('concept-map')}><Icon name="concept-map" className="w-4 h-4" />Concept Map</TabButton>
                              {result.images && result.images.length > 0 && (
                                 <TabButton active={activeTab === 'figures'} onClick={() => setActiveTab('figures')}>Figures</TabButton>
                             )}
@@ -270,20 +268,6 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
                                     ) : <SkeletonList count={2} />}
                                 </div>
                             )}
-                            {activeTab === 'concept-map' && (
-                                 <div className="animate-fade-in h-[500px]">
-                                    <h3 className="font-semibold text-brand-text mb-4">Concept Map</h3>
-                                    {result.conceptMap ? (
-                                        result.conceptMap.nodes.length > 0 ? (
-                                            <ConceptMap data={result.conceptMap} />
-                                        ) : (
-                                            <p className="text-brand-text-muted">Could not generate a concept map for this document.</p>
-                                        )
-                                    ) : (
-                                        <div className="w-full h-full bg-brand-muted rounded-lg animate-pulse"></div>
-                                    )}
-                                </div>
-                            )}
                             {activeTab === 'figures' && (
                                 <div className="animate-fade-in">
                                     <h3 className="font-semibold text-brand-text mb-4">Extracted Figures</h3>
@@ -330,7 +314,11 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ result, documentT
                 </div>
 
                 <div className="lg:col-span-1">
-                    <ChatInterface documentText={documentText} figures={result.images || []} />
+                    <ChatInterface 
+                        documentText={documentText} 
+                        figures={result.images || []}
+                        overallSummary={result.overallSummary || ''}
+                    />
                 </div>
             </main>
             {showFigureModal && (

@@ -8,8 +8,9 @@ import Footer from './components/Footer';
 import QuizModal from './components/QuizModal';
 import PresentationModal from './components/PresentationModal';
 import { 
-    generateQuiz, validateDocument, findRelatedPapers, generatePresentation, resetChat,
-    generateSynthesisReport, generateFullAnalysis
+    findRelatedPapers, generatePresentation, resetChat,
+    generateSynthesisReport, validateAndGenerateQuiz, 
+    generateCoreAnalysis, generateAdvancedAnalysis, generateReferences
 } from './services/geminiService';
 import { getHistory, saveAnalysis } from './services/historyService';
 import { Persona } from './types';
@@ -63,59 +64,52 @@ const App: React.FC = () => {
         toast.error(errorMessage, { duration: 6000 });
         handleReset();
     };
-
-    const proceedWithSingleAnalysis = (text: string, images: string[], name: string) => {
-        setProgress(20);
-        setLoadingMessage('Generating comprehension quiz...');
-        setDocumentText(text);
-        setDocumentImages(images);
-        setFileName(name);
-        setAnalysisMode('single');
-
-        generateQuiz(text)
-            .then(questions => {
-                setQuizQuestions(questions);
-                setShowQuizModal(true);
-                setProgress(30);
-                setIsLoading(false); // Allow the quiz modal to display
-            })
-            .catch(error => {
-                console.error("Failed to generate quiz:", error);
-                toast.error(`Could not generate quiz: ${error instanceof Error ? error.message : 'Unknown error'}. Starting analysis directly.`);
-                runSingleAnalysis(Persona.ENGINEER);
-            });
-    };
     
     const runSingleAnalysis = async (persona: Persona) => {
         setShowQuizModal(false);
         setIsLoading(true);
-        setProgress(50);
-        setLoadingMessage('Performing comprehensive analysis...');
-        
+        setAnalysisMode('single');
+
         try {
-            // Single, consolidated call for all main analysis data
-            const fullAnalysis = await generateFullAnalysis(documentText, persona);
+            // STEP 1: Core Analysis (blocking)
+            setProgress(70);
+            setLoadingMessage('Generating key takeaways & summary...');
+            const coreAnalysis = await generateCoreAnalysis(documentText, persona);
             
-            const completeResult: Partial<AnalysisResult> = {
-                ...fullAnalysis,
+            const initialResult: Partial<AnalysisResult> = {
+                ...coreAnalysis,
                 images: documentImages,
             };
+
+            setAnalysisResult(initialResult);
+            setProgress(80);
+            setLoadingMessage('Analysis complete! Fetching details...');
+            setIsLoading(false); // Hide main loader, skeletons will show in dashboard
+
+            // STEP 2: Advanced Analysis (background)
+            generateAdvancedAnalysis(documentText, persona).then(advancedAnalysis => {
+                setAnalysisResult(prev => ({ ...prev, ...advancedAnalysis }));
+            }).catch(err => {
+                console.error("Failed to fetch advanced analysis", err);
+                toast.error("Could not load critique and ideation details.");
+            });
             
-            setAnalysisResult(completeResult);
-            setProgress(100);
-            setLoadingMessage('Analysis complete!');
-            
-            // Fetch related papers in the background as a separate, non-critical step
-            if (fullAnalysis.title && fullAnalysis.overallSummary) {
-                findRelatedPapers(fullAnalysis.title, fullAnalysis.overallSummary).then(relatedPapers => {
+            // STEP 3: References & Related Papers (background)
+            generateReferences(documentText).then(referencesResult => {
+                 setAnalysisResult(prev => ({ ...prev, ...referencesResult }));
+            }).catch(err => {
+                console.error("Failed to fetch references", err);
+                toast.error("Could not load references.");
+            });
+
+            if (initialResult.title && initialResult.overallSummary) {
+                findRelatedPapers(initialResult.title, initialResult.overallSummary).then(relatedPapers => {
                     setAnalysisResult(prev => ({ ...prev, relatedPapers }));
                 });
             }
 
-        } catch (e: any) {
-            handleGenericError(e);
-        } finally {
-            setIsLoading(false); // Analysis is fully complete
+        } catch (error) {
+            handleGenericError(error);
         }
     };
     
@@ -138,7 +132,6 @@ const App: React.FC = () => {
             setIsLoading(false);
         }
     }
-
 
     const handleGeneratePresentation = async () => {
         if (!documentText) {
@@ -163,8 +156,6 @@ const App: React.FC = () => {
 
     const handleFilesParsed = async (files: ParsedFile[]) => {
         setIsLoading(true);
-        setProgress(10);
-        setLoadingMessage('Validating document(s)...');
         
         if (files.length === 0) {
             setIsLoading(false);
@@ -175,30 +166,39 @@ const App: React.FC = () => {
             runSynthesisAnalysis(files);
             return;
         }
-
+        
+        setProgress(10);
+        setLoadingMessage('Validating document & preparing quiz...');
         const { text, images, name } = files[0];
+        setDocumentText(text);
+        setDocumentImages(images);
+        setFileName(name);
+
         try {
-            const validation = await validateDocument(text);
+            const { validation, quiz } = await validateAndGenerateQuiz(text);
+            
             if (!validation.isPaper) {
-                toast((t) => (
-                    <div className="flex flex-col gap-3">
-                        <p><b>Warning:</b> This file may not be a research paper. ({validation.reason})</p>
-                        <div className="flex gap-2">
-                            <button onClick={() => { toast.dismiss(t.id); proceedWithSingleAnalysis(text, images, name); }} className="w-full bg-green-500 text-white text-sm font-bold p-2 rounded-md">Proceed Anyway</button>
-                            <button onClick={() => { toast.dismiss(t.id); handleReset(); }} className="w-full bg-gray-500 text-white text-sm font-bold p-2 rounded-md">Cancel</button>
-                        </div>
-                    </div>
-                ), { duration: Infinity });
-                setIsLoading(false);
-                setProgress(0);
+                toast.error(`This document doesn't appear to be a research paper. Reason: ${validation.reason}`, { duration: 8000 });
+                handleReset();
                 return;
             }
-            proceedWithSingleAnalysis(text, images, name);
+
+            setProgress(60);
+            setLoadingMessage('Awaiting quiz completion...');
+            
+            if (quiz.questions && quiz.questions.length > 0) {
+                setQuizQuestions(quiz.questions);
+                setShowQuizModal(true);
+                // The main loader will be hidden by the quiz modal, but we keep the state.
+            } else {
+                toast.success("No quiz needed, proceeding with analysis.");
+                runSingleAnalysis(Persona.ENGINEER);
+            }
+
         } catch (error) {
-             console.error("Failed to process document:", error);
+             console.error("Failed to validate or generate quiz:", error);
              toast.error(`Could not process the document: ${error instanceof Error ? error.message : 'Unknown error'}.`);
-             setIsLoading(false);
-             setProgress(0);
+             handleReset();
         }
     };
 
@@ -227,7 +227,7 @@ const App: React.FC = () => {
     };
     
     const renderContent = () => {
-        if (analysisMode === 'single' && analysisResult) {
+        if (analysisMode === 'single' && analysisResult?.title) {
             return (
                 <AnalysisDashboard
                     result={analysisResult}
@@ -251,7 +251,7 @@ const App: React.FC = () => {
         return (
             <LandingPage
                 onFilesParsed={handleFilesParsed}
-                isLoading={isLoading}
+                isLoading={isLoading || showQuizModal}
                 progress={progress}
                 updateProgress={setProgress}
                 loadingMessage={loadingMessage}
@@ -270,7 +270,7 @@ const App: React.FC = () => {
             }} />
             <main className="relative z-10">
                 {renderContent()}
-                {showQuizModal && !isLoading && (
+                {showQuizModal && (
                     <QuizModal
                         questions={quizQuestions}
                         onComplete={runSingleAnalysis}

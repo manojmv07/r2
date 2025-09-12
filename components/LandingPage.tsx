@@ -70,7 +70,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onFilesParsed, isLoading, pro
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.7, delay: 0.4 }}
-                    className="block lg:block bg-brand-surface border border-brand-muted rounded-xl p-4 mt-8 lg:mt-0"
+                    className="hidden lg:block bg-brand-surface border border-brand-muted rounded-xl p-4 mt-8 lg:mt-0"
                 >
                     <div className="aspect-video bg-brand-bg rounded-lg p-6 flex flex-col gap-4 overflow-hidden">
                          <div className="flex justify-between items-center">
@@ -112,7 +112,6 @@ const LandingPage: React.FC<LandingPageProps> = ({ onFilesParsed, isLoading, pro
                 <motion.div variants={itemVariants}><Feature icon="flask" title="AI Ideation Lab" description="Generate novel research hypotheses and potential experimental designs based on a paper's findings and limitations." /></motion.div>
                 <motion.div variants={itemVariants}><Feature icon="bibliography" title="Automated Bibliography" description="Extract all citations from a paper and export them in APA or BibTeX format with a single click." /></motion.div>
                 <motion.div variants={itemVariants}><Feature icon="summary" title="Interactive Glossary" description="Hover over any key technical term in the analysis to get an instant, context-aware definition." /></motion.div>
-                <motion.div variants={itemVariants}><Feature icon="brain-circuit" title="Concept Mapping" description="Visualize the core concepts and their relationships in an interactive, force-directed graph." /></motion.div>
                 <motion.div variants={itemVariants}><Feature icon="critique" title="AI-Powered Critique" description="Receive an automated analysis of the paper's strengths, weaknesses, and novelty." /></motion.div>
                 <motion.div variants={itemVariants}><Feature icon="presentation" title="Presentation Generator" description="Create a slide-by-slide presentation draft from the paper in seconds." /></motion.div>
                 <motion.div variants={itemVariants}><Feature icon="search" title="Related Paper Discovery" description="Find similar and relevant research papers powered by Google Search." /></motion.div>
@@ -122,8 +121,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onFilesParsed, isLoading, pro
             {history.length > 0 && !isLoading && (
                  <motion.div 
                     initial={{ opacity: 0, y: 50 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.7, delay: 0.6 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, amount: 0.2 }}
+                    transition={{ duration: 0.7, delay: 0.2 }}
                     className="mt-24 md:mt-32 max-w-4xl mx-auto"
                 >
                     <h2 className="text-3xl font-bold text-center mb-8 flex items-center justify-center gap-3">

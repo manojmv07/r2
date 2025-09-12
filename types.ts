@@ -58,7 +58,6 @@ export interface AnalysisResult {
         uri: string;
     }[];
     images: string[];
-    conceptMap?: ConceptMapData;
     glossary?: GlossaryTerm[];
     ideation?: Hypothesis[];
     references?: Reference;
